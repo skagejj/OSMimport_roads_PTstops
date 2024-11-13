@@ -35,7 +35,7 @@ import os.path
 # Import for the code in def run()
 import pandas as pd
 from qgis import processing
-
+from .core_functions import busroutes
 
 class OSMimport:
     """QGIS Plugin Implementation."""
@@ -212,7 +212,7 @@ class OSMimport:
             main_files = pd.DataFrame()
 
 
-            temp_folder = 'OSM_roads'
+            temp_folder = 'OSM_data'
             road_temp_folder = os.path.join(dwnldfld,temp_folder)
             os.makedirs(road_temp_folder)
 
@@ -226,8 +226,11 @@ class OSMimport:
             north = round(float(stops.stop_lat.max()) +0.05,6)
             east = round(float(stops.stop_lon.max()) +0.05,6)
 
+            OSM_ways_name = 'OSM_ways'
+            OSM_ways_gpkg = str(road_temp_folder)+'/'+str(OSM_ways_name)+'.gpkg'
+            main_files.loc[0,'file_name'] = OSM_ways_name
+            main_files.loc[0,'file_path'] = OSM_ways_gpkg
             
-            OSM_ways_gpkg = str(road_temp_folder)+'/OSM_ways.gpkg'
 
             extent = str(south)+','+str(west)+','+str(north)+','+str(east)
             extent_quickosm = str(south)+','+str(west)+','+str(north)+','+str(east)+' [EPSG:4326]'
@@ -242,8 +245,18 @@ class OSMimport:
             Roads_layer_file = str(OSM_ways_gpkg)+'|layername=OSM_ways_lines'
             Roads_layer =  QgsVectorLayer(Roads_layer_file,"Roads","ogr")
 
-            OSM_roads_gpkg = str(road_temp_folder)+'/OSM_roads.gpkg'
+            OSM_roads_name = 'OSM_roads'
+            OSM_roads_gpkg = str(road_temp_folder)+'/'+str(OSM_roads_name)+'.gpkg'
+            main_files.loc[1,'file_name'] = OSM_roads_name
+            main_files.loc[1,'file_path'] = OSM_roads_gpkg
+            
             QgsVectorFileWriter.writeAsVectorFormat(Roads_layer, OSM_roads_gpkg, "UTF-8", Roads_layer.crs(), "GPKG")
 
-
+            bus_lanes_gpkg, bus_lanes_name = busroutes(OSM_roads_gpkg,road_temp_folder)
+            main_files.loc[2,'file_name'] = bus_lanes_name
+            main_files.loc[2,'file_path'] = bus_lanes_gpkg
             
+            main_files.to_csv('./main_files.csv',index=False)
+
+
+                        
