@@ -1,0 +1,5 @@
+<RCC>
+    <qresource prefix="/plugins/OSMimport_road_PTstops" >
+        <file>icon.png</file>
+    </qresource>
+</RCC>
