@@ -7,25 +7,93 @@
     <x>0</x>
     <y>0</y>
     <width>600</width>
-    <height>300</height>
+    <height>650</height>
    </rect>
   </property>
   <property name="minimumSize">
    <size>
     <width>600</width>
-    <height>300</height>
+    <height>650</height>
    </size>
   </property>
   <property name="maximumSize">
    <size>
     <width>1000</width>
-    <height>450</height>
+    <height>1200</height>
    </size>
   </property>
   <property name="windowTitle">
    <string>OSM import roads and transport stops</string>
   </property>
   <layout class="QGridLayout" name="gridLayout">
+   <item row="2" column="0">
+    <widget class="QGroupBox" name="groupBox">
+     <property name="title">
+      <string>BUS only</string>
+     </property>
+     <layout class="QGridLayout" name="gridLayout_2">
+      <item row="3" column="0">
+       <widget class="QLabel" name="label_3">
+        <property name="text">
+         <string>Select the only the bus lines</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="QListWidget" name="listbusWidget">
+        <property name="font">
+         <font>
+          <family>Sans Serif</family>
+          <pointsize>14</pointsize>
+          <weight>75</weight>
+          <bold>true</bold>
+         </font>
+        </property>
+        <property name="frameShape">
+         <enum>QFrame::WinPanel</enum>
+        </property>
+        <property name="frameShadow">
+         <enum>QFrame::Sunken</enum>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::MultiSelection</enum>
+        </property>
+        <property name="flow">
+         <enum>QListView::LeftToRight</enum>
+        </property>
+        <property name="isWrapping" stdset="0">
+         <bool>true</bool>
+        </property>
+        <property name="selectionRectVisible">
+         <bool>false</bool>
+        </property>
+        <property name="itemAlignment">
+         <set>Qt::AlignCenter</set>
+        </property>
+        <property name="sortingEnabled">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QPushButton" name="UpdatebusButton">
+        <property name="maximumSize">
+         <size>
+          <width>200</width>
+          <height>16777215</height>
+         </size>
+        </property>
+        <property name="layoutDirection">
+         <enum>Qt::LeftToRight</enum>
+        </property>
+        <property name="text">
+         <string>Update Transport numbers</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
    <item row="4" column="0">
     <widget class="QDialogButtonBox" name="button_box">
      <property name="orientation">
@@ -124,19 +192,6 @@
       </item>
      </layout>
     </widget>
-   </item>
-   <item row="2" column="0">
-    <spacer name="verticalSpacer">
-     <property name="orientation">
-      <enum>Qt::Vertical</enum>
-     </property>
-     <property name="sizeHint" stdset="0">
-      <size>
-       <width>20</width>
-       <height>40</height>
-      </size>
-     </property>
-    </spacer>
    </item>
   </layout>
  </widget>

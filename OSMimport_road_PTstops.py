@@ -23,7 +23,7 @@
 """
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
-from qgis.PyQt.QtWidgets import QAction
+from qgis.PyQt.QtWidgets import QAction, QListWidgetItem
 from qgis.core import  QgsVectorLayer, QgsVectorFileWriter
 
 # Initialize Qt resources from file resources.py
@@ -35,7 +35,8 @@ import os.path
 # Import for the code in def run()
 import pandas as pd
 from qgis import processing
-from .core_functions import busroutes
+from .core_functions import busroutes, full_city_roads, Selected_Ttbls
+import re
 
 class OSMimport:
     """QGIS Plugin Implementation."""
@@ -173,10 +174,19 @@ class OSMimport:
             text=self.tr(u'1. Import OSM city\'s roads and PT stops'),
             callback=self.run,
             parent=self.iface.mainWindow())
+        
+        self.OSMimport_dialog.UpdatebusButton.clicked.connect(self.__updateBuses)
 
         # will be set False in run()
         self.first_start = True
 
+    def __updateBuses(self):        
+        self.OSMimport_dialog.listbusWidget.clear()  # Clear existing items
+        dwnldfld = self.OSMimport_dialog.DownloadQgsFolderWidget.filePath()
+        routes = pd.read_csv(str(dwnldfld)+'/routes.txt')
+        ls_transport = routes.route_short_name.unique()
+        for trnsprt in ls_transport:
+            self.OSMimport_dialog.listbusWidget.addItem(QListWidgetItem(trnsprt))
 
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
@@ -201,6 +211,9 @@ class OSMimport:
         # Run the dialog event loop
         result = self.OSMimport_dialog.exec_()
 
+        # load selected Busses
+        selected_items = self.OSMimport_dialog.listbusWidget.selectedItems()
+        
         # load the downloads and output folders
         dwnldfld = self.OSMimport_dialog.DownloadQgsFolderWidget.filePath()
 
@@ -209,54 +222,85 @@ class OSMimport:
         if result:
             # Do something useful here - delete the line containing pass and
             # substitute with your code.
+
+            ls_buses = [item.text() for item in selected_items]
+            print('the buses you have choosen are: '+str(ls_buses))
+
             main_files = pd.DataFrame()
 
 
-            temp_folder = 'OSM_data'
+            temp_folder = 'OSM_datas'
             road_temp_folder = os.path.join(dwnldfld,temp_folder)
-            os.makedirs(road_temp_folder)
+            # # os.makedirs(road_temp_folder)
 
-            del temp_folder
+            # # del temp_folder
 
-            stops_txt = str(dwnldfld)+'/stop.txt'
-            stops = pd.read_csv(stops_txt)
+            # # stops_txt = str(dwnldfld)+'/stops.txt'
+            # # stops = pd.read_csv(stops_txt)
 
-            south = round(float(stops.stop_lat.min()) -0.05,6)
-            west = round(float(stops.stop_lon.min()) -0.05,6)
-            north = round(float(stops.stop_lat.max()) +0.05,6)
-            east = round(float(stops.stop_lon.max()) +0.05,6)
+            # # south = round(float(stops.stop_lat.min()) -0.05,6)
+            # # west = round(float(stops.stop_lon.min()) -0.05,6)
+            # # north = round(float(stops.stop_lat.max()) +0.05,6)
+            # # east = round(float(stops.stop_lon.max()) +0.05,6)
 
             OSM_ways_name = 'OSM_ways'
             OSM_ways_gpkg = str(road_temp_folder)+'/'+str(OSM_ways_name)+'.gpkg'
-            main_files.loc[0,'file_name'] = OSM_ways_name
-            main_files.loc[0,'file_path'] = OSM_ways_gpkg
+            i_row = len(main_files)
+            main_files.loc[i_row,'file_name'] = OSM_ways_name
+            main_files.loc[i_row,'file_path'] = OSM_ways_gpkg
             
 
-            extent = str(south)+','+str(west)+','+str(north)+','+str(east)
-            extent_quickosm = str(south)+','+str(west)+','+str(north)+','+str(east)+' [EPSG:4326]'
-            params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    way["highway"="service"]('+str(extent)+');\n    way["highway"="living_street"]('+str(extent)+');\n    way["highway"="motorway"]('+str(extent)+');\n    way["highway"="primary"]('+str(extent)+');\n    way["highway"="secondary"]('+str(extent)+');\n    way["highway"="tertiary"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="unclassified"]('+str(extent)+');\n    way["highway"="motorway_link"]('+str(extent)+');\n    way["highway"="primary_link"]('+str(extent)+');\n    way["highway"="secondary_link"]('+str(extent)+');\n    way["highway"="tertiary_link"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="motorway_junction"]('+str(extent)+');\n    \n  \t\n);\n(._;>;);\nout body;',
-                    'TIMEOUT':180,
-                    'SERVER':'https://overpass-api.de/api/interpreter',
-                    'EXTENT':extent_quickosm,
-                    'AREA':'',
-                    'FILE': OSM_ways_gpkg}
-            processing.run("quickosm:downloadosmdatarawquery", params )
+            # # extent = str(south)+','+str(west)+','+str(north)+','+str(east)
+            # # extent_quickosm = str(south)+','+str(west)+','+str(north)+','+str(east)+' [EPSG:4326]'
+            # # params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    way["highway"="service"]('+str(extent)+');\n    way["highway"="living_street"]('+str(extent)+');\n    way["highway"="motorway"]('+str(extent)+');\n    way["highway"="primary"]('+str(extent)+');\n    way["highway"="secondary"]('+str(extent)+');\n    way["highway"="tertiary"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="unclassified"]('+str(extent)+');\n    way["highway"="motorway_link"]('+str(extent)+');\n    way["highway"="primary_link"]('+str(extent)+');\n    way["highway"="secondary_link"]('+str(extent)+');\n    way["highway"="tertiary_link"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="motorway_junction"]('+str(extent)+');\n    \n  \t\n);\n(._;>;);\nout body;',
+            # #         'TIMEOUT':180,
+            # #         'SERVER':'https://overpass-api.de/api/interpreter',
+            # #         'EXTENT':extent_quickosm,
+            # #         'AREA':'',
+            # #         'FILE': OSM_ways_gpkg}
+            # # processing.run("quickosm:downloadosmdatarawquery", params )
 
-            Roads_layer_file = str(OSM_ways_gpkg)+'|layername=OSM_ways_lines'
-            Roads_layer =  QgsVectorLayer(Roads_layer_file,"Roads","ogr")
+            # # Roads_layer_file = str(OSM_ways_gpkg)+'|layername=OSM_ways_lines'
+            # # Roads_layer =  QgsVectorLayer(Roads_layer_file,"Roads","ogr")
 
             OSM_roads_name = 'OSM_roads'
             OSM_roads_gpkg = str(road_temp_folder)+'/'+str(OSM_roads_name)+'.gpkg'
-            main_files.loc[1,'file_name'] = OSM_roads_name
-            main_files.loc[1,'file_path'] = OSM_roads_gpkg
+            i_row = len(main_files)
+            main_files.loc[i_row,'file_name'] = OSM_roads_name
+            main_files.loc[i_row,'file_path'] = OSM_roads_gpkg
             
-            QgsVectorFileWriter.writeAsVectorFormat(Roads_layer, OSM_roads_gpkg, "UTF-8", Roads_layer.crs(), "GPKG")
+            # # QgsVectorFileWriter.writeAsVectorFormat(Roads_layer, OSM_roads_gpkg, "UTF-8", Roads_layer.crs(), "GPKG")
 
-            bus_lanes_gpkg, bus_lanes_name = busroutes(OSM_roads_gpkg,road_temp_folder)
-            main_files.loc[2,'file_name'] = bus_lanes_name
-            main_files.loc[2,'file_path'] = bus_lanes_gpkg
             
-            main_files.to_csv('./main_files.csv',index=False)
+            # i_row = len(main_files)
 
+            bus_lanes_name = 'OSM_bus_lanes'
+            OSM_bus_lanes_gpkg = str(road_temp_folder)+'/'+str(bus_lanes_name)+'.gpkg'
+            main_files.loc[i_row,'file_name'] = bus_lanes_name
+            main_files.loc[i_row,'file_path'] = OSM_bus_lanes_gpkg
+            
+            # busroutes(bus_lanes_name, OSM_bus_lanes_gpkg,OSM_roads_gpkg)
 
-                        
+            full_roads_name = 'full_city_roads'
+            full_roads_gpgk = str(road_temp_folder)+'/'+str(full_roads_name)+'.gpkg'
+            i_row = len(main_files)
+            main_files.loc[i_row,'file_name'] = full_roads_name
+            main_files.loc[i_row,'file_path'] = full_roads_gpgk
+
+            # full_city_roads(OSM_roads_gpkg,bus_lanes_gpkg, full_roads_gpgk)
+            
+            Ttlbs_txt = str(dwnldfld)+'/stop_times.txt'
+
+            Ttbls_selected_name = 'stop_times_selected_lines'
+            Ttbls_selected_txt = str(dwnldfld)+'/'+str(Ttbls_selected_name)+'.txt'
+
+            Selected_Ttbls(ls_buses,Ttbls_selected_txt,Ttlbs_txt,dwnldfld) 
+
+            i_row = len(main_files)
+            main_files.loc[i_row,'file_name'] = Ttbls_selected_name
+            main_files.loc[i_row,'file_path'] = Ttbls_selected_txt
+
+            temp_folder = str(os.getenv("USERNAME"))+'_main_files'
+            os.makedirs(str(dwnldfld)+'/'+str(temp_folder))
+            main_files.to_csv(str(dwnldfld)+'/'+str(temp_folder)+'/main_files.csv',index=False)
+
