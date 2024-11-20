@@ -35,8 +35,7 @@ import os.path
 # Import for the code in def run()
 import pandas as pd
 from qgis import processing
-from .core_functions import busroutes, full_city_roads, Selected_Ttbls
-import re
+from .core_functions import busroutes, full_city_roads, Selected_Ttbls, preapare_GTFSstops_by_transport, time_tables_perTransport, angles, rectangles_bus, OSMintersecGTFS, OSM_PTstps_dwnld, stp_posGTFSnm_rect, joinNEWandValidOSM, display_vector_layer, zoom_to_layer, highway_average_speed
 
 class OSMimport:
     """QGIS Plugin Implementation."""
@@ -229,19 +228,19 @@ class OSMimport:
             main_files = pd.DataFrame()
 
 
-            temp_folder = 'OSM_datas'
+            temp_folder = 'OSM_data'
             road_temp_folder = os.path.join(dwnldfld,temp_folder)
-            # # os.makedirs(road_temp_folder)
+            os.makedirs(road_temp_folder)
 
-            # # del temp_folder
+            del temp_folder
 
-            # # stops_txt = str(dwnldfld)+'/stops.txt'
-            # # stops = pd.read_csv(stops_txt)
+            stops_txt = str(dwnldfld)+'/stops.txt'
+            stops = pd.read_csv(stops_txt)
 
-            # # south = round(float(stops.stop_lat.min()) -0.05,6)
-            # # west = round(float(stops.stop_lon.min()) -0.05,6)
-            # # north = round(float(stops.stop_lat.max()) +0.05,6)
-            # # east = round(float(stops.stop_lon.max()) +0.05,6)
+            south = round(float(stops.stop_lat.min()) -0.05,6)
+            west = round(float(stops.stop_lon.min()) -0.05,6)
+            north = round(float(stops.stop_lat.max()) +0.05,6)
+            east = round(float(stops.stop_lon.max()) +0.05,6)
 
             OSM_ways_name = 'OSM_ways'
             OSM_ways_gpkg = str(road_temp_folder)+'/'+str(OSM_ways_name)+'.gpkg'
@@ -249,19 +248,19 @@ class OSMimport:
             main_files.loc[i_row,'file_name'] = OSM_ways_name
             main_files.loc[i_row,'file_path'] = OSM_ways_gpkg
             
+            
+            extent = str(south)+','+str(west)+','+str(north)+','+str(east)
+            extent_quickosm = str(south)+','+str(west)+','+str(north)+','+str(east)+' [EPSG:4326]'
+            params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    way["highway"="service"]('+str(extent)+');\n    way["highway"="living_street"]('+str(extent)+');\n    way["highway"="motorway"]('+str(extent)+');\n    way["highway"="primary"]('+str(extent)+');\n    way["highway"="secondary"]('+str(extent)+');\n    way["highway"="tertiary"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="unclassified"]('+str(extent)+');\n    way["highway"="motorway_link"]('+str(extent)+');\n    way["highway"="primary_link"]('+str(extent)+');\n    way["highway"="secondary_link"]('+str(extent)+');\n    way["highway"="tertiary_link"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="motorway_junction"]('+str(extent)+');\n    \n  \t\n);\n(._;>;);\nout body;',
+                    'TIMEOUT':180,
+                    'SERVER':'https://overpass-api.de/api/interpreter',
+                    'EXTENT':extent_quickosm,
+                    'AREA':'',
+                    'FILE': OSM_ways_gpkg}
+            processing.run("quickosm:downloadosmdatarawquery", params )
 
-            # # extent = str(south)+','+str(west)+','+str(north)+','+str(east)
-            # # extent_quickosm = str(south)+','+str(west)+','+str(north)+','+str(east)+' [EPSG:4326]'
-            # # params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    way["highway"="service"]('+str(extent)+');\n    way["highway"="living_street"]('+str(extent)+');\n    way["highway"="motorway"]('+str(extent)+');\n    way["highway"="primary"]('+str(extent)+');\n    way["highway"="secondary"]('+str(extent)+');\n    way["highway"="tertiary"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="unclassified"]('+str(extent)+');\n    way["highway"="motorway_link"]('+str(extent)+');\n    way["highway"="primary_link"]('+str(extent)+');\n    way["highway"="secondary_link"]('+str(extent)+');\n    way["highway"="tertiary_link"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="motorway_junction"]('+str(extent)+');\n    \n  \t\n);\n(._;>;);\nout body;',
-            # #         'TIMEOUT':180,
-            # #         'SERVER':'https://overpass-api.de/api/interpreter',
-            # #         'EXTENT':extent_quickosm,
-            # #         'AREA':'',
-            # #         'FILE': OSM_ways_gpkg}
-            # # processing.run("quickosm:downloadosmdatarawquery", params )
-
-            # # Roads_layer_file = str(OSM_ways_gpkg)+'|layername=OSM_ways_lines'
-            # # Roads_layer =  QgsVectorLayer(Roads_layer_file,"Roads","ogr")
+            Roads_layer_file = str(OSM_ways_gpkg)+'|layername=OSM_ways_lines'
+            Roads_layer =  QgsVectorLayer(Roads_layer_file,"Roads","ogr")
 
             OSM_roads_name = 'OSM_roads'
             OSM_roads_gpkg = str(road_temp_folder)+'/'+str(OSM_roads_name)+'.gpkg'
@@ -269,17 +268,31 @@ class OSMimport:
             main_files.loc[i_row,'file_name'] = OSM_roads_name
             main_files.loc[i_row,'file_path'] = OSM_roads_gpkg
             
-            # # QgsVectorFileWriter.writeAsVectorFormat(Roads_layer, OSM_roads_gpkg, "UTF-8", Roads_layer.crs(), "GPKG")
+            OSM_roads_nameCSV = 'OSM_roads_CSV'
+            OSM_roads_csv = str(road_temp_folder)+'/'+str(OSM_roads_name)+'.csv'
+            i_row = len(main_files)
+            main_files.loc[i_row,'file_name'] = OSM_roads_nameCSV
+            main_files.loc[i_row,'file_path'] = OSM_roads_csv
 
-            
-            # i_row = len(main_files)
+            QgsVectorFileWriter.writeAsVectorFormat(Roads_layer, OSM_roads_gpkg, "UTF-8", Roads_layer.crs(), "GPKG")
+            QgsVectorFileWriter.writeAsVectorFormat(Roads_layer,OSM_roads_csv,"utf-8",driverName = "CSV")
 
+            highway_speed_name = 'highway_average_speed'
+            highway_speed_csv = str(road_temp_folder)+'/'+str(highway_speed_name)+'.csv'
+            i_row = len(main_files)
+            main_files.loc[i_row,'file_name'] = highway_speed_name
+            main_files.loc[i_row,'file_path'] = highway_speed_csv
+
+            highway_average_speed(OSM_roads_csv,highway_speed_csv)
+
+
+            i_row = len(main_files)
             bus_lanes_name = 'OSM_bus_lanes'
             OSM_bus_lanes_gpkg = str(road_temp_folder)+'/'+str(bus_lanes_name)+'.gpkg'
             main_files.loc[i_row,'file_name'] = bus_lanes_name
             main_files.loc[i_row,'file_path'] = OSM_bus_lanes_gpkg
             
-            # busroutes(bus_lanes_name, OSM_bus_lanes_gpkg,OSM_roads_gpkg)
+            busroutes(bus_lanes_name, OSM_bus_lanes_gpkg,OSM_roads_gpkg)
 
             full_roads_name = 'full_city_roads'
             full_roads_gpgk = str(road_temp_folder)+'/'+str(full_roads_name)+'.gpkg'
@@ -287,7 +300,9 @@ class OSMimport:
             main_files.loc[i_row,'file_name'] = full_roads_name
             main_files.loc[i_row,'file_path'] = full_roads_gpgk
 
-            # full_city_roads(OSM_roads_gpkg,bus_lanes_gpkg, full_roads_gpgk)
+            city_roads_name = 'city roads'
+
+            full_city_roads(OSM_roads_gpkg,OSM_bus_lanes_gpkg, full_roads_gpgk,city_roads_name)
             
             Ttlbs_txt = str(dwnldfld)+'/stop_times.txt'
 
@@ -304,3 +319,256 @@ class OSMimport:
             os.makedirs(str(dwnldfld)+'/'+str(temp_folder))
             main_files.to_csv(str(dwnldfld)+'/'+str(temp_folder)+'/main_files.csv',index=False)
 
+            print('the main Time Tables is ready, I start to create the dataframes for each single transport')
+
+            tempfolder = 'stop_times_perroute'
+            temp_folder_Ttbls = os.path.join (dwnldfld,tempfolder)
+            os.makedirs(temp_folder_Ttbls)
+            
+            stops_times_plus = pd.read_csv(Ttbls_selected_txt)
+            # create transport Times tables for each transport
+            lsrts = stops_times_plus.route_id.unique()
+
+            lslines=[]
+            lines_df = pd.DataFrame()
+            
+            trnsprt_type = 'trnsprt'
+
+            sumTtbls = 0 
+            i_row = 0
+            for rt in lsrts:
+                line, nameline, Ttbl_file, rt_srt_nm= time_tables_perTransport(rt,stops_times_plus,temp_folder_Ttbls,lslines, trnsprt_type)
+                sumTtbls = sumTtbls + len(line)
+                lines_df.loc[i_row,'line_name'] = nameline
+                lines_df.loc[i_row,'route_short_name'] = rt_srt_nm
+                lines_df.loc[i_row,'GTFSstop_times'] = Ttbl_file
+                lslines.append(nameline)
+                i_row += 1
+                del line, nameline, Ttbl_file
+            del i_row
+            print ('The Time tables are ready')
+
+            if len(stops_times_plus) == sumTtbls:
+                print ('all the lines are there')
+            else:
+                dif = len(stops_times_plus)-sumTtbls
+                print (str(dif)+' scores are missing')
+            
+            del tempfolder
+            
+            print('prepariing the GTFSstops geopackages')
+
+            stops = pd.read_csv(str(dwnldfld)+'/stops.txt')
+            
+            tempfolder = 'GTFSstops&segments_perroute'
+            temp_folder_GTFSstops = os.path.join (dwnldfld,tempfolder)
+            os.makedirs(temp_folder_GTFSstops)
+
+            # creating the a df for listing the files paths 
+                        
+            lines_df['GTFSstops&segments'] = ""
+            
+            i_row=0
+            while i_row < len(lines_df):
+                Ttbl_file = lines_df.loc[i_row,'GTFSstop_times'] 
+                line = lines_df.loc[i_row,'line_name']
+                shrt_name = lines_df.loc[i_row,'route_short_name']
+                GTFSstops = preapare_GTFSstops_by_transport(stops,Ttbl_file,line,temp_folder_GTFSstops,shrt_name)
+                lines_df.loc[i_row,'GTFSstops&segments'] = GTFSstops
+                i_row=i_row+1 
+            del i_row
+
+            tempfolder = 'temp_roads_angls'
+            temproadfldr = os.path.join(dwnldfld,tempfolder)
+            os.makedirs(temproadfldr)
+
+            del tempfolder
+            
+            city_roads_layer = QgsVectorLayer(OSM_roads_gpkg,city_roads_name,"ogr")
+
+            print ('... adding the angles to the GTFSstops')
+
+            tempfolderGTFSnm = 'temp_GTFSnomatch'
+            temp_GTFSnm_folder = os.path.join (dwnldfld,tempfolderGTFSnm)
+            os.makedirs(temp_GTFSnm_folder)
+
+            # create GTFSstops gpkg with angle of the nearest road 
+            lines_df['GTFSstps_angle'] = ""
+            lines_df['GTFSnm_RD'] = ""
+            lines_df['GTFSnm_angCSV'] = ""
+            lines_df['Spl_roads'] = ""
+            
+            GTFSnm_angledf = pd.DataFrame()
+            i_row = 0
+            while i_row < len(lines_df):
+                line = lines_df.loc[i_row,'line_name']
+                GTFSstops_path = lines_df.loc[i_row,'GTFSstops&segments']
+                GTFSstops_angle, GTFSnm_RD, GTFSnm_angCSV, spl_file = angles(city_roads_layer,line,GTFSstops_path,temproadfldr,temp_GTFSnm_folder)
+                lines_df.loc[i_row,'GTFSnm_RD'] = GTFSnm_RD
+                lines_df.loc[i_row,'GTFSstps_angle'] = GTFSstops_angle
+                lines_df.loc[i_row,'GTFSnm_angCSV'] = GTFSnm_angCSV
+                lines_df.loc[i_row, 'Spl_roads'] = spl_file
+                GTFSnm_angl_toconcat = pd.read_csv(GTFSnm_angCSV)
+                GTFSnm_angledf = pd.concat([GTFSnm_angledf,GTFSnm_angl_toconcat],ignore_index=True) 
+                i_row = i_row+1
+            del i_row,  GTFSnm_RD
+
+            GTFSnm_angledf.to_csv(str(outputspath+'/GTFSnm_angl.csv'))
+
+            tempfolder = 'temp_rect'
+            temp_rect_folder = os.path.join (dwnldfld,tempfolder)
+            os.makedirs(temp_rect_folder)
+
+            tempfolder = 'perdinst'
+            perdist = os.path.join(temp_rect_folder,tempfolder)
+            os.makedirs(perdist)
+    
+
+            print('Creating vector layers to join to the OSM stops')
+
+            trnsprt_long = 0.00020
+            lines_df['GTFSangle_csv'] = ""
+            lines_df['GTFSstps_rect'] = ""
+            i_row = 0
+            
+            while i_row < len(lines_df):
+                GTFSstops_path = lines_df.loc[i_row,'GTFSstps_angle']
+                line = lines_df.loc[i_row,'line_name']
+                lines_df.loc[i_row,'GTFSstps_rect'], lines_df.loc[i_row,'GTFSangle_csv']  = rectangles_bus(GTFSstops_path, trnsprt_long,temp_rect_folder,line)
+                i_row = i_row + 1
+            del i_row
+
+            temp_folder = 'OSM_PTstops'
+            OSMstops_temp_folder = os.path.join(dwnldfld,temp_folder)
+            os.makedirs(OSMstops_temp_folder)
+
+
+            i_row = 0
+
+            while i_row < len(lines_df):
+                line = lines_df.loc[i_row,'line_name']
+                shrt_name = lines_df.loc[i_row,'route_short_name']
+
+                OSM_PTstp_rel_name = 'PT_stops_rel_'+str(shrt_name)
+                OSM_PTstp_rel_gpkg = str(OSMstops_temp_folder)+'/'+str(OSM_PTstp_rel_name)+'.gpkg'
+                OSM_PTstp_name = 'PT_stop_position_'+str(shrt_name)
+                OSM_PTstp_gpkg = str(OSMstops_temp_folder)+'/'+str(OSM_PTstp_name)+'.gpkg'
+                lines_df.loc[i_row,'OSM_PTstp'] = OSM_PTstp_gpkg
+                OSM_PTstps_dwnld(extent, extent_quickosm,OSM_PTstp_rel_gpkg,OSM_PTstp_gpkg,shrt_name, OSM_PTstp_rel_name, OSM_PTstp_name)
+                i_row += 1
+
+             
+            tempfolder = 'temp_OSM'
+            temp_OSM_folder = os.path.join (dwnldfld,tempfolder)
+            os.makedirs(temp_OSM_folder)
+
+
+            print('joining OSM and GTFS')
+            
+            OSMwithGTFS = pd.DataFrame()
+            dfnomatch = pd.DataFrame()
+            lines_df['OSMintersecGTFS'] = ""
+            lines_df['OSMnomatch'] = ""
+            i_row = 0
+            while i_row < len(lines_df):
+                rect = lines_df.loc[i_row,'GTFSstps_rect']
+                srtnm = lines_df.loc[i_row,'route_short_name']
+                OSM_PTstp_gpkg = lines_df.loc[i_row,'OSM_PTstp']
+                intersect, match, OSMjnGTFS, OSMnomatch = OSMintersecGTFS(rect,OSM_PTstp_gpkg,temp_OSM_folder,srtnm)
+                lines_df.loc[i_row,'OSMintersecGTFS'] = OSMjnGTFS
+                lines_df.loc[i_row,'OSMnomatch'] = OSMnomatch
+
+                OSMwithGTFS = pd.concat ([OSMwithGTFS,intersect],ignore_index=True)
+                dfnomatch = pd.concat ([dfnomatch,match],ignore_index=True)
+
+                del OSMjnGTFS, OSMnomatch, rect, srtnm
+                i_row = i_row + 1
+            
+            del i_row
+            OSMwithGTFS.to_csv(str(outputspath)+'/OSMintersecGTFS.csv', index=False)
+            dfnomatch.to_csv(str(outputspath)+'/OSMnomatch.csv', index=False)
+
+
+            GTFSnm_rect = pd.DataFrame()
+            lines_df['GTFSnmRCT'] = ""
+            
+            # create list of GTFS rectangls that don't match with any OSM
+            i_row = 0
+            while i_row < len(lines_df):
+                GTFSnmRCT_csv = str(temp_GTFSnm_folder)+'/GTFSnmRCT_'+str(lines_df.loc[i_row,'line_name'])+'.csv'
+                OSMjnGTFS = pd.read_csv(lines_df.loc[i_row,'OSMintersecGTFS'])
+                lsGTFSjoined = OSMjnGTFS.GTFS_stop_id.unique()
+                GTFSstops = pd.read_csv(lines_df.loc[i_row,'GTFSstops&segments'])
+                GTFSnom = GTFSstops[~GTFSstops.stop_id.isin(lsGTFSjoined)]
+                GTFSnm_RD = pd.read_csv(lines_df.loc[i_row,'GTFSnm_angCSV'])
+                lsGTFSnmRD = GTFSnm_RD.stop_id.unique()
+                GTFSnmRCT = GTFSnom[~GTFSnom.stop_id.isin(lsGTFSnmRD)]
+                GTFSnmRCT.to_csv(GTFSnmRCT_csv, index = False)
+                lines_df.loc[i_row,'GTFSnmRCT'] = GTFSnmRCT_csv
+                GTFSnm_rect = pd.concat ([GTFSnm_rect,GTFSnmRCT],ignore_index=True)
+                del OSMjnGTFS, lsGTFSjoined, GTFSstops
+                i_row += 1
+            del i_row, tempfolder,GTFSnmRCT
+            
+            GTFSnm_rect.to_csv(str(outputspath)+'/GTFSnm_rect.csv', index=False)
+            
+            tempfolder = 'temp_GTFSpos'
+            temp_GTFSpos_folder = os.path.join (dwnldfld,tempfolder)
+            os.makedirs(temp_GTFSpos_folder)
+            
+            
+
+            GTFSnmRCT_posdf = pd.DataFrame()
+            lines_df['GTFSnmRCT_newpos'] = ""
+            i_row = 0
+            while i_row<len(lines_df):
+                line = lines_df.loc[i_row,'line_name']
+                GTFSnmRCT = lines_df.loc[i_row,'GTFSnmRCT']
+                splt_roads = lines_df.loc[i_row,'Spl_roads']
+                NEWpos_file_nmRCT = stp_posGTFSnm_rect(GTFSnmRCT,line,splt_roads,temp_GTFSpos_folder,trnsprt_long)
+                lines_df.loc[i_row, 'GTFSnmRCT_newOSMpos'] = NEWpos_file_nmRCT
+                posdf = pd.read_csv(NEWpos_file_nmRCT)
+                GTFSnmRCT_posdf = pd.concat([GTFSnmRCT_posdf,posdf],ignore_index=True)
+                i_row += 1
+            del i_row
+
+            GTFSnmRCT_posdf.to_csv(str(outputspath)+'/GTFSnmRCT_NEWpos.csv')
+            
+            tempfolder = 'temp_OSM_forrouting'
+            temp_OSM_for_routing = os.path.join (dwnldfld,tempfolder)
+            os.makedirs(temp_OSM_for_routing)
+
+            OSM4routing = pd.DataFrame()
+            i_row = 0
+            while i_row < len(lines_df):
+                newOSMpos = lines_df.loc[i_row, 'GTFSnmRCT_newOSMpos'] 
+                GTFSnomatch_RD = lines_df.loc[i_row,'GTFSnm_angCSV']
+                OSMintersectGTFS = lines_df.loc[i_row,'OSMintersecGTFS']
+                GTFSstps_seg = lines_df.loc[i_row,'GTFSstops&segments'] 
+                line = lines_df.loc[i_row,'line_name']
+                OSMstops_forrouting = joinNEWandValidOSM(newOSMpos,GTFSnomatch_RD,OSMintersectGTFS,GTFSstps_seg,temp_OSM_for_routing,line)
+                lines_df.loc[i_row,'OSM4routing'] = OSMstops_forrouting
+                OSM4r_toconcat = pd.read_csv(OSMstops_forrouting)
+                OSM4routing = pd.concat([OSM4routing,OSM4r_toconcat],ignore_index=True)
+                i_row += 1
+            # *str(outputspath+'/GTFSnm_angl.csv')*
+            OSM4rout_file = str(outputspath)+'/OSM4routing.csv'
+            OSM4routing.to_csv(OSM4rout_file,index=False)
+            OSM4rout_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(OSM4rout_file,"EPSG:4326", ",", "lon", "lat")
+            OSM4rout_layer = QgsVectorLayer(OSM4rout_path,"OSM_for_routing","delimitedtext")
+
+
+            # saving the lines df
+            lines_df.to_csv(str(dwnldfld)+'/lines_files_list.csv',index=False)
+            del lines_df
+
+            display_vector_layer(OSM4rout_layer)
+            zoom_to_layer(OSM4rout_layer)
+
+            print('Done! : your files are ready')
+
+
+
+
+
+            
