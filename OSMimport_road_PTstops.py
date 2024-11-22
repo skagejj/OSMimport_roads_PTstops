@@ -421,7 +421,6 @@ class OSMimport:
                 lslines.append(nameline)
                 i_row += 1
                 
-            
             print ('The Time tables are ready')
 
             if len(stops_times_plus) == sumTtbls:
@@ -434,7 +433,6 @@ class OSMimport:
             
             # creating the a df for listing the files paths 
                         
-                       
             i_row = lines_df_row_init
             while i_row < len(lines_df):
                 Ttbl_file = lines_df.loc[i_row,'GTFSstop_times'] 
@@ -470,7 +468,6 @@ class OSMimport:
 
             trnsprt_long = 0.00020
 
-            
             i_row = lines_df_row_init
             while i_row < len(lines_df):
                 GTFSstops_path = lines_df.loc[i_row,'GTFSstps_angle']
@@ -494,8 +491,6 @@ class OSMimport:
 
             print('joining OSM and GTFS')
             
-            
-
             i_row = lines_df_row_init
             while i_row < len(lines_df):
                 rect = lines_df.loc[i_row,'GTFSstps_rect']
@@ -513,9 +508,6 @@ class OSMimport:
 
             OSMwithGTFS.to_csv(OSMwithGTFS_csv, index=False)
             dfnomatch.to_csv(dfnomatch_csv, index=False)
-
-
-            
             
             # create list of GTFS rectangls that don't match with any OSM
             i_row = lines_df_row_init
@@ -534,11 +526,8 @@ class OSMimport:
                 
                 i_row += 1
             
-            
-            
             GTFSnm_rect.to_csv(GTFSnm_rect_csv, index=False)
 
-            
             i_row = lines_df_row_init
             while i_row<len(lines_df):
                 line = lines_df.loc[i_row,'line_name']
@@ -553,8 +542,6 @@ class OSMimport:
             
             GTFSnmRCT_posdf.to_csv(GTFSnmRCT_posdf_csv)
               
-
-            
             i_row = lines_df_row_init
             while i_row < len(lines_df):
                 newOSMpos = lines_df.loc[i_row, 'GTFSnmRCT_newOSMpos'] 
@@ -567,9 +554,6 @@ class OSMimport:
                 OSM4r_toconcat = pd.read_csv(OSMstops_forrouting)
                 OSM4routing = pd.concat([OSM4routing,OSM4r_toconcat],ignore_index=True)
                 i_row += 1
-
-            
-            
                       
             OSM4routing.to_csv(OSM4rout_file,index=False)
 
@@ -586,13 +570,20 @@ class OSMimport:
             QgsProject.instance().addMapLayer(city_roads_layer)
 
             # publishing the trips on the canvas
+            
+            ls_buses_todisp = [str(bus) for bus in ls_buses_selected]
+            ls_buses_select_df = pd.DataFrame(ls_buses_todisp).rename(columns={0:'route_short_name'})
+            ls_buses_select_df = ls_buses_select_df.merge(lines_df, how='left', on='route_short_name')
+            ls_trnsprt_todisplay = list(ls_buses_select_df.line_name.unique())
             ls_files = os.listdir(temp_OSM_for_routing)
             ls_gpkg = [file for file in ls_files if ".gpkg" in file]
-            for gpkg in ls_gpkg:
-                OSM_trip4rout_gpkg = str(temp_OSM_for_routing)+'/'+str(gpkg)
-                OSM_trip4rout_layer = QgsVectorLayer(OSM_trip4rout_gpkg,str(gpkg[:-5]),"ogr")
-                QgsProject.instance().addMapLayer(OSM_trip4rout_layer)
 
+            for trnsprt in ls_trnsprt_todisplay:
+                to_display = [gpkg for gpkg in ls_gpkg if trnsprt in gpkg]
+                for layer in to_display:
+                    OSM_trip4rout_gpkg = str(temp_OSM_for_routing)+'/'+str(layer)
+                    OSM_trip4rout_layer = QgsVectorLayer(OSM_trip4rout_gpkg,str(layer[:-5]),"ogr")
+                    QgsProject.instance().addMapLayer(OSM_trip4rout_layer)
 
             # saving the lines df
             lines_df.to_csv(lines_df_csv,index=False)
