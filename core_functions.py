@@ -1,5 +1,17 @@
 from qgis import processing
-from qgis.core import QgsProperty, QgsVectorFileWriter, QgsVectorLayer, QgsField, QgsExpressionContext, QgsExpressionContextUtils, edit, QgsExpression, QgsCoordinateReferenceSystem, QgsProcessingFeatureSourceDefinition,QgsFeatureRequest, QgsProject
+from qgis.core import (QgsProperty, 
+                        QgsVectorFileWriter, 
+                        QgsVectorLayer, 
+                        QgsField, 
+                        QgsExpressionContext, 
+                        QgsExpressionContextUtils, 
+                        edit, 
+                        QgsExpression, 
+                        QgsCoordinateReferenceSystem, 
+                        QgsProcessingFeatureSourceDefinition,
+                        QgsFeatureRequest, 
+                        QgsProject
+)
 from qgis.utils import iface
 from qgis.PyQt.QtCore import QVariant
 import pandas as pd
@@ -38,7 +50,7 @@ def highway_average_speed(OSM_roads_csv,highway_speed_csv):
 
     highway_speed.to_csv(highway_speed_csv,index=False)
 
-def busroutes(bus_lanes_name, OSM_bus_lanes_gpkg,OSM_roads_gpkg):
+def busroutes(bus_lanes_name, OSM_bus_lanes_gpkg,OSM_roads_gpkg,highway_speed_csv):
 
     # extract bus lanes in a gpkg
     bus_lanes_selection = '"bus" is not NULL OR "bus:lanes" is not NULL OR "bus:lanes:backward" is not NULL OR "bus:lanes:forward" is not NULL OR "busway" is not NULL OR "busway:left" is not NULL OR "busway:left" is not NULL   OR "busway:right" is not NULL OR "busway:right" is not NULL   OR "hgv" is not NULL OR "hgv:lanes" is not NULL OR "lanes:bus" is not NULL OR "lanes:bus:backward" is not NULL OR "lanes:bus:forward" is not NULL OR "lanes:psv" is not NULL   OR "lanes:psv:forward" is not NULL   OR "maxheight:physical" is not NULL   OR "oneway:bus" is not NULL   OR "oneway:psv" is not NULL   OR "trolley_wire" is not NULL   OR "trolleybus" is not NULL   OR "tourist_bus:lanes" is not NULL   OR "psv" is not NULL   OR "psv:lanes" is not NULL   OR "highway" is \'busway\' OR "psv:lanes:forward" is not NULL OR "psv:lanes:backward" is not NULL'
@@ -54,7 +66,22 @@ def busroutes(bus_lanes_name, OSM_bus_lanes_gpkg,OSM_roads_gpkg):
     bus_lanes_layer.updateFields()
 
     expression1 = QgsExpression('IF("bus:lanes:backward" is not NULL OR "busway:left" is not NULL OR "lanes:bus:backward" is not NULL OR "psv:lanes:backward" is not NULL OR "oneway:bus" is \'no\' OR "onewqy:psv" is \'no\', \'backward\',\'forward\')')
-    expression2 = QgsExpression('if("maxspeed" is not NULL AND regexp_match("maxspeed",\'[0-9]+\'), "maxspeed"*\'2\', if("highway" = \'residential\',\'68\', if("highway" = \'motorway\',\'207\', if("highway" = \'motorway_link\',\'131\', if("highway" = \'tertiary\',\'96\', if("highway" = \'unclassified\',\'88\', if("highway" = \'trunk_link\',\'156\', if("highway" = \'primary\',\'114\', if("highway" = \'secondary\',\'106\', if("highway" = \'service\',\'55\', if("highway" = \'primary_link\',\'106\', if("highway" = \'trunk\',\'215\', if("highway" = \'tertiary_link\',\'98\', if("highway" = \'secondary_link\',\'100\', if("highway" = \'living_street\',\'40\',\'70\')))))))))))))))')
+    
+    highway_speed = pd.read_csv(highway_speed_csv)
+    condition = 'if("maxspeed" is not NULL AND regexp_match("maxspeed",\'[0-9]+\'), "maxspeed"*\'2\', '
+    brakets = ')'
+    i_row = 0
+
+    while i_row < len(highway_speed):
+        highway_type = highway_speed.loc[i_row,'highway']
+        speed = int(highway_speed.loc[i_row,'bus_lanes'])
+        to_add = 'if("highway" is \''+str(highway_type)+'\',\''+str(speed)+'\', '
+        condition = str(condition)+str(to_add)
+        brakets = str(brakets)+')'
+        i_row += 1
+
+    condition = str(condition)+'\'80\' '+str(brakets)
+    expression2 = QgsExpression(condition)
 
     context = QgsExpressionContext()
     context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(bus_lanes_layer))
@@ -75,7 +102,7 @@ def busroutes(bus_lanes_name, OSM_bus_lanes_gpkg,OSM_roads_gpkg):
 
     return OSM_bus_lanes_gpkg, bus_lanes_name
 
-def full_city_roads(OSM_roads_gpkg,bus_lanes_gpkg, full_roads_gpgk, city_roads_name):
+def full_city_roads(OSM_roads_gpkg,bus_lanes_gpkg, full_roads_gpgk, city_roads_name,highway_speed_csv):
     
     road_layer = QgsVectorLayer(OSM_roads_gpkg,city_roads_name,"ogr")
     
@@ -85,7 +112,22 @@ def full_city_roads(OSM_roads_gpkg,bus_lanes_gpkg, full_roads_gpgk, city_roads_n
     road_layer.updateFields()
 
     expression1 = QgsExpression('IF("oneway" is \'yes\',\'forward\',NULL)')
-    expression2 = QgsExpression('if("maxspeed" is not NULL AND regexp_match("maxspeed",\'[0-9]+\'), "maxspeed", if("highway" = \'residential\',\'34\', if("highway" = \'motorway\',\'103\', if("highway" = \'motorway_link\',\'75\', if("highway" = \'tertiary\',\'48\', if("highway" = \'unclassified\',\'44\', if("highway" = \'trunk_link\',\'78\', if("highway" = \'primary\',\'57\', if("highway" = \'secondary\',\'53\', if("highway" = \'service\',\'27\', if("highway" = \'primary_link\',\'53\', if("highway" = \'trunk\',\'117\', if("highway" = \'tertiary_link\',\'49\', if("highway" = \'secondary_link\',\'50\', if("highway" = \'living_street\',\'20\',\'50\')))))))))))))))')
+        
+    highway_speed = pd.read_csv(highway_speed_csv)
+    condition = 'if("maxspeed" is not NULL AND regexp_match("maxspeed",\'[0-9]+\'), "maxspeed", '
+    brakets = ')'
+    i_row = 0
+
+    while i_row < len(highway_speed):
+        highway_type = highway_speed.loc[i_row,'highway']
+        speed = int(highway_speed.loc[i_row,'average_speed'])
+        to_add = 'if("highway" is \''+str(highway_type)+'\',\''+str(speed)+'\', '
+        condition = str(condition)+str(to_add)
+        brakets = str(brakets)+')'
+        i_row += 1
+
+    condition = str(condition)+'\'40\' '+str(brakets)
+    expression2 = QgsExpression(condition)
 
     context = QgsExpressionContext()
     context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(road_layer))
@@ -138,12 +180,14 @@ def Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld):
     Ttbls.to_csv(Ttbls_plus_csv,index=False)
 
 
-def Selected_Ttbls(ls_buses,Ttbls_selected_txt,Ttbls_plus_csv, dwnldfld):
+def Selected_Ttbls(ls_buses,Ttbls_selected_txt,Ttbls_plus_csv):
     
     Ttbls = pd.read_csv(Ttbls_plus_csv)
 
     Ttbls_selected = Ttbls[Ttbls['route_short_name'].isin(ls_buses) ]
 
+    if os.path.exists(Ttbls_selected_txt):
+        os.remove(Ttbls_selected_txt)
     Ttbls_selected.to_csv(Ttbls_selected_txt, index=False)
 
 def time_tables_perTransport(rt,Ttbls,tempfldr,lstrnsprt,trnsprt_type ):
@@ -166,12 +210,14 @@ def time_tables_perTransport(rt,Ttbls,tempfldr,lstrnsprt,trnsprt_type ):
     
     Ttbl['line_name'] = nametbl
     Ttbl = Ttbl.reset_index(drop=True)
+    pattern = r'[^:]+$'
     i_row = 0
     while i_row < len(Ttbl):
-        if Ttbl.loc[i_row, 'stop_id'][-1:].isnumeric():
-            Ttbl.loc[i_row, 'stp_pltfrm'] = ''
+        stop_id = str(Ttbl.loc[i_row, 'stop_id'])
+        if re.search('[0-9]+\:',stop_id):
+            Ttbl.loc[i_row, 'stp_pltfrm'] = str(re.search(pattern,stop_id).group())
         else:
-            Ttbl.loc[i_row, 'stp_pltfrm'] = Ttbl.loc[i_row, 'stop_id'][-1:]
+            Ttbl.loc[i_row, 'stp_pltfrm'] = ''
         i_row += 1
     
     Ttbl_file = str(tempfldr)+'/'+str(nametbl)+'_stop_times.csv'
@@ -180,10 +226,10 @@ def time_tables_perTransport(rt,Ttbls,tempfldr,lstrnsprt,trnsprt_type ):
     return Ttbl, nametbl, Ttbl_file, rt_srt_nm
 
     
-def preapare_GTFSstops_by_transport(stps, Ttbl_file,trnsprt,tempfolder,shrt_name):
-    
+def preapare_GTFSstops_by_transport(stops_txt, Ttbl_file,trnsprt,tempfolder,shrt_name):
+    stps = pd.read_csv(stops_txt, dtype={'stop_id':str})
     #load the stop times (Time Table) ot the transport
-    Ttbl_unsorted = pd.read_csv(Ttbl_file)
+    Ttbl_unsorted = pd.read_csv(Ttbl_file, dtype={'stop_id':str})
     Ttbl = Ttbl_unsorted.sort_values(['trip_id','departure_time','stop_sequence']).reset_index(drop=True)
 
     #create the stop table per transport
@@ -325,8 +371,9 @@ def preapare_GTFSstops_by_transport(stps, Ttbl_file,trnsprt,tempfolder,shrt_name
         i_row += 1
         i_row2 += 1
 
-
-    
+    if not most_freq_stps.stop_id.dtypes == 'object':
+        most_freq_stps = most_freq_stps.astype({'stop_id':'int'})
+        most_freq_stps = most_freq_stps.astype({'stop_id':'str'})    
     most_freq_stps = most_freq_stps.merge (stps, how='left', on='stop_id') 
 
     i=0
@@ -336,15 +383,21 @@ def preapare_GTFSstops_by_transport(stps, Ttbl_file,trnsprt,tempfolder,shrt_name
         most_freq_stps.loc[i,'prnt_stp_id'] = str(most_freq_stps.loc[i,'stop_id'][:7])
         i=i+1
     del i
-    i=0
+
     
     # calculate the stp_pltfrm in Ttbls
-    while i < len(most_freq_stps):
-        if str(most_freq_stps.loc[i,'stop_id'][-1:]).isnumeric():
-            most_freq_stps.loc[i,'stp_pltfrm'] = ""
+    
+    pattern = r'[^:]+$'
+    i_row = 0
+    while i_row < len(most_freq_stps):
+        stop_id = str(most_freq_stps.loc[i_row, 'stop_id'])
+        if re.search('[0-9]+\:',stop_id):
+            most_freq_stps.loc[i_row, 'stp_pltfrm'] = str(re.search(pattern,stop_id).group())
         else:
-            most_freq_stps.loc[i,'stp_pltfrm'] = str(most_freq_stps.loc[i,'stop_id'][-1:])
-        i=i+1
+            most_freq_stps.loc[i_row, 'stp_pltfrm'] = ''
+        i_row += 1
+    
+
     most_freq_stps['line_name'] = trnsprt
     
     most_freq_stps['route_short_name'] = shrt_name
@@ -404,7 +457,7 @@ def angles(roadlayer,trnsprt,trnsprt_GTFSstops_file,temp_road_folder,GTFSnm_fold
             f['stp_angl'] = expression.evaluate(context)
             splt_roads.updateFeature(f)
     
-    anglefile = str(temp_road_folder)+'/GTFS'+str(trnsprt)+'_anlge.gpkg'
+    anglefile = str(temp_road_folder)+'/GTFS'+str(trnsprt)+'_angle.gpkg'
     GTFSnomatchangl = str(GTFSnm_folder)+'/GTFS_NOmatch_RD'+str(trnsprt)+'.gpkg'
     GTFS_NMangcsv = str(GTFSnm_folder)+'/GTFS_NOmatch_RD'+str(trnsprt)+'.csv'
 
@@ -424,15 +477,23 @@ def angles(roadlayer,trnsprt,trnsprt_GTFSstops_file,temp_road_folder,GTFSnm_fold
     del params, context, expression
     return anglefile, GTFSnomatchangl, GTFS_NMangcsv, spl_file
 
-def rectangles_bus(stops_angls, trnsprt_long,temp_folder, trnsprt):
-    GTFScsv = str(temp_folder)+'/GTFSangl_'+str(trnsprt)+'.csv'
-    rectfile = str(temp_folder)+'/rects_'+str(trnsprt)+'.gpkg'
+def angle_onRD_sidewalk(GTFSstops_angle, GTFSstops_angle_sidewalk_gpkg,GTFSstops_angle_OSMonROADline_gpkg):
+    params = {'INPUT': GTFSstops_angle,
+                'EXPRESSION':'"distance" > 0.00001',
+                'OUTPUT': GTFSstops_angle_sidewalk_gpkg,
+                'FAIL_OUTPUT': GTFSstops_angle_OSMonROADline_gpkg}
+    processing.run("native:extractbyexpression", params)
 
-    GTFS_angl = QgsVectorLayer(stops_angls,'angl_'+str(trnsprt),'ogr')
+def rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, trnsprt_long, trnsprt, GTFSstps_rect_sidewalk_gpkg, GTFSstps_rect_sidewalk_csv):
+
+    rect_type = 'sidewalk'
+
+    GTFS_angl = QgsVectorLayer(GTFSstops_angle_sidewalk_gpkg,'angl_'+str(trnsprt),'ogr')
     pr = GTFS_angl.dataProvider()
     pr.addAttributes([QgsField("rect_angle", QVariant.Double),
                     QgsField("rect_x2", QVariant.Double),
-                    QgsField("rect_y2", QVariant.Double)])
+                    QgsField("rect_y2", QVariant.Double),
+                    QgsField("rect_type", QVariant.String)])
     GTFS_angl.updateFields()
     
     expression1 = QgsExpression('azimuth( make_point( "feature_x" ,  "feature_y" ), make_point( "nearest_x" ,  "nearest_y" ) )-1.570796327')
@@ -448,24 +509,25 @@ def rectangles_bus(stops_angls, trnsprt_long,temp_folder, trnsprt):
             f['rect_angle'] = expression1.evaluate(context)
             f['rect_x2'] = expression2.evaluate(context)
             f['rect_y2'] = expression3.evaluate(context)
+            f['rect_type'] = rect_type
             GTFS_angl.updateFeature(f)
     GTFS_angl.commitChanges()
 
     del context
     
-    QgsVectorFileWriter.writeAsVectorFormat(GTFS_angl,GTFScsv,"utf-8",driverName = "CSV")
+    QgsVectorFileWriter.writeAsVectorFormat(GTFS_angl,GTFSstps_rect_sidewalk_csv,"utf-8",driverName = "CSV")
 
     # the QgsExpression function doesn't work with sin() function that works on the QGIS FieldCalculator
-    GTFS_angldf = pd.read_csv(GTFScsv)
+    GTFS_angldf = pd.read_csv(GTFSstps_rect_sidewalk_csv)
     posXY = trnsprt_long/2
     GTFS_angldf['rect_x'] = GTFS_angldf['rect_x2'] + posXY*np.sin(GTFS_angldf['rect_angle'])
     GTFS_angldf['rect_y'] = GTFS_angldf['rect_y2'] + posXY*np.cos(GTFS_angldf['rect_angle'])
 
-    os.remove(GTFScsv)
+    os.remove(GTFSstps_rect_sidewalk_csv)
 
-    GTFS_angldf.to_csv(GTFScsv,index=False)
+    GTFS_angldf.to_csv(GTFSstps_rect_sidewalk_csv,index=False)
 
-    GTFScsvpath = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(GTFScsv,"epsg:4326", ",", "rect_x", "rect_y")
+    GTFScsvpath = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(GTFSstps_rect_sidewalk_csv,"epsg:4326", ",", "rect_x", "rect_y")
     GTFS_angl_layer = QgsVectorLayer(GTFScsvpath ,'GTFSangl_'+str(trnsprt),"delimitedtext")
 
     params = {
@@ -475,12 +537,60 @@ def rectangles_bus(stops_angls, trnsprt_long,temp_folder, trnsprt):
         'HEIGHT': trnsprt_long,
         'ROTATION': QgsProperty.fromExpression('degrees("rect_angle")'),
         'SEGMENTS': 36,
-        'OUTPUT': rectfile
+        'OUTPUT': GTFSstps_rect_sidewalk_gpkg
         }
     processing.run("native:rectanglesovalsdiamonds", params)
 
     del params, expression1,expression2,expression3
-    return rectfile, GTFScsv
+    # return rectfile, GTFScsv
+
+def rectangles_OSMonROADline(GTFSstops_path_OSMonROADline,trnsprt_long, road_average_width,line, GTFSstps_rect_OSMonROADline_gpkg):
+    
+    long = trnsprt_long*2
+    params = {
+                'INPUT': str(GTFSstops_path_OSMonROADline),
+                'SHAPE': 0,
+                'WIDTH': road_average_width,
+                'HEIGHT': long,
+                'ROTATION': QgsProperty.fromExpression('"nrstrd_stp_angl"'),
+                'SEGMENTS': 36,
+                'OUTPUT': GTFSstps_rect_OSMonROADline_gpkg
+                }
+    processing.run("native:rectanglesovalsdiamonds", params)
+
+    rect_type = 'OSMonROADline'
+    
+    vlayer = QgsVectorLayer(GTFSstps_rect_OSMonROADline_gpkg,'rects_OSMonROADline_'+str(line),'ogr')
+    pr = vlayer.dataProvider()
+    pr.addAttributes([QgsField("rect_type", QVariant.String)])
+    vlayer.updateFields()
+
+    context = QgsExpressionContext()
+    context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(vlayer))
+
+    with edit(vlayer):
+        for f in vlayer.getFeatures():
+            context.setFeature(f)
+            f['rect_type'] = rect_type
+            vlayer.updateFeature(f)
+    vlayer.commitChanges()
+
+    # deleting useless fields in rectfile
+    lstodelete = ['stop_lat','stop_lon','location_type','parent_station','OBJECTID','Shape_Length','STR_ESID','nrstrd_stp_angl','n','distance','feature_x','feature_y','nearest_x','nearest_y','layer','path']
+       
+    idtodelete = [vlayer.fields().indexOf(field_name) for field_name in lstodelete]
+    idtodelete = [index for index in idtodelete if index != -1]
+    if not vlayer.isEditable():
+        vlayer.startEditing()
+    res = vlayer.dataProvider().deleteAttributes(idtodelete)
+    if res:
+        vlayer.updateFields()  # Update the layer's fields
+    else:
+        print("Failed to delete attributes")
+    vlayer.commitChanges()
+
+    del params, lstodelete, idtodelete
+    
 
 def OSM_PTstps_dwnld(extent, extent_quickosm,OSM_PTstp_rel_gpkg,OSM_PTstp_gpkg,shrt_name, OSM_PTstp_rel_name, OSM_PTstp_name):
     params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    relation["route"="bus"]["ref"="'+str(shrt_name)+'"]('+str(extent)+');\n);\n(._;>;);\nout body;',
@@ -565,7 +675,6 @@ def OSMintersecGTFS(rectangles,OSMgpkg,tempOSMfolder,shrt_name):
 def stp_posGTFSnm_rect(GTFSnm_rectCSV,trnsprt,splt_roads,temp_posRCT_folder,trnsprt_long):
     GTFSnm_rect_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(GTFSnm_rectCSV,"epsg:4326", ",", "stop_lon", "stop_lat")
     GTFSnm_rect_layer = QgsVectorLayer(GTFSnm_rect_path,'GTFSNMrect_'+str(trnsprt) ,"delimitedtext")
-
     
     GTFS_nmRCT_pos_CSV1 = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(trnsprt)+'_1.csv'
     GTFS_nmRCT_pos_CSV2 = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(trnsprt)+'_2.csv'
@@ -645,16 +754,16 @@ def stp_posGTFSnm_rect(GTFSnm_rectCSV,trnsprt,splt_roads,temp_posRCT_folder,trns
     
     GTFS_posdf.to_csv(GTFS_nmRCT_NEWpos_CSV, index=False)
     
-    os.remove(str(GTFS_nmRCT_pos_CSV1))
-    os.remove(str(GTFS_nmRCT_pos_CSV2))
-    os.remove(str(GTFS_nmRCT_pos_CSV3))
-    os.remove(str(GTFS_pos1))
+    os.remove(GTFS_nmRCT_pos_CSV1)
+    os.remove(GTFS_nmRCT_pos_CSV2)
+    os.remove(GTFS_nmRCT_pos_CSV3)
+    os.remove(GTFS_pos1)
 
     return GTFS_nmRCT_NEWpos_CSV
 
 def joinNEWandValidOSM(newOSMpos,GTFSnomatch_RD,OSMintersectGTFS,GTFSstps_seg,temp_OSM_for_routing,line,stops_txt):
-    newOSM = pd.read_csv(newOSMpos)
-    GTFSnm = pd.read_csv(GTFSnomatch_RD)
+    newOSM = pd.read_csv(newOSMpos,dtype = {'stop_id': str})
+    GTFSnm = pd.read_csv(GTFSnomatch_RD,dtype = {'stop_id': str})
     validOSM = pd.read_csv(OSMintersectGTFS)
     GTFSss = pd.read_csv(GTFSstps_seg)
 
@@ -687,7 +796,8 @@ def joinNEWandValidOSM(newOSMpos,GTFSnomatch_RD,OSMintersectGTFS,GTFSstps_seg,te
     ls_trips = OSMstops_updated.line_trip.unique()
     
 
-    stops = pd.read_csv(stops_txt)
+    stops = pd.read_csv(stops_txt,dtype = {'stop_id': str})
+    OSMstops_updated = OSMstops_updated.astype({'GTFS_stop_id':'str'})
     stops = stops[['stop_id','stop_lon','stop_lat']]
     OSMstops_updated = OSMstops_updated.merge(stops,how='left', left_on='GTFS_stop_id', right_on='stop_id')
 

@@ -24,7 +24,12 @@
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QListWidgetItem
-from qgis.core import  QgsVectorLayer, QgsVectorFileWriter, QgsRasterLayer, QgsProject
+from qgis.core import  (QgsCoordinateReferenceSystem, 
+                        QgsVectorLayer, 
+                        QgsVectorFileWriter, 
+                        QgsRasterLayer, 
+                        QgsProject,
+ )
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -35,7 +40,23 @@ import os.path
 # Import for the code in def run()
 import pandas as pd
 from qgis import processing
-from .core_functions import busroutes, full_city_roads, Selected_Ttbls, preapare_GTFSstops_by_transport, time_tables_perTransport, angles, rectangles_bus, OSMintersecGTFS, OSM_PTstps_dwnld, stp_posGTFSnm_rect, joinNEWandValidOSM, display_vector_layer, zoom_to_layer, highway_average_speed, transcript_main_files,Ttbls_plus
+from .core_functions import (busroutes, 
+                            full_city_roads, 
+                            Selected_Ttbls, 
+                            preapare_GTFSstops_by_transport, 
+                            time_tables_perTransport, angles, 
+                            rectangles_sidewalk, 
+                            rectangles_OSMonROADline,
+                            OSMintersecGTFS, 
+                            OSM_PTstps_dwnld, 
+                            stp_posGTFSnm_rect, 
+                            joinNEWandValidOSM, 
+                            display_vector_layer, zoom_to_layer, 
+                            highway_average_speed, 
+                            transcript_main_files,
+                            Ttbls_plus,
+                            angle_onRD_sidewalk
+)
 
 class OSMimport:
     """QGIS Plugin Implementation."""
@@ -279,34 +300,34 @@ class OSMimport:
             ls_buses_done_name = 'buses'
             ls_buses_done_csv = str(main_files_fld)+'/'+str(ls_buses_done_name)+'.csv'
 
-            tempfolder = 'stop_times_perroute'
+            tempfolder = 'temp/stop_times_perroute'
             temp_folder_Ttbls = os.path.join (dwnldfld,tempfolder)
             
-            tempfolder = 'GTFSstops&segments_perroute'
+            tempfolder = 'temp/GTFSstops&segments_perroute'
             temp_folder_GTFSstops = os.path.join (dwnldfld,tempfolder)
 
-            tempfolder = 'temp_roads_angls'
+            tempfolder = 'temp/temp_roads_angls'
             temproadfldr = os.path.join(dwnldfld,tempfolder)
 
-            tempfolderGTFSnm = 'temp_GTFSnomatch'
+            tempfolderGTFSnm = 'temp/temp_GTFSnomatch'
             temp_GTFSnm_folder = os.path.join (dwnldfld,tempfolderGTFSnm)
             
-            tempfolder = 'temp_rect'
+            tempfolder = 'temp/temp_rect'
             temp_rect_folder = os.path.join (dwnldfld,tempfolder)
 
             tempfolder = 'perdinst'
             perdist = os.path.join(temp_rect_folder,tempfolder)
 
-            temp_folder = 'OSM_PTstops'
+            temp_folder = 'temp/OSM_PTstops'
             OSMstops_temp_folder = os.path.join(dwnldfld,temp_folder)
              
-            tempfolder = 'temp_OSM'
+            tempfolder = 'temp/temp_OSM'
             temp_OSM_folder = os.path.join (dwnldfld,tempfolder)
             
-            tempfolder = 'temp_GTFSpos'
+            tempfolder = 'temp/temp_GTFSpos'
             temp_GTFSpos_folder = os.path.join (dwnldfld,tempfolder)
 
-            tempfolder = 'temp_OSM_forrouting'
+            tempfolder = 'temp/temp_OSM_forrouting'
             temp_OSM_for_routing = os.path.join (dwnldfld,tempfolder)
                         
             GTFSnm_angledf_csv = str(outputspath+'/GTFSnm_angl.csv')
@@ -316,29 +337,15 @@ class OSMimport:
             GTFSnmRCT_posdf_csv = str(outputspath)+'/GTFSnmRCT_NEWpos.csv'
             OSM4rout_file = str(outputspath)+'/OSM4routing.csv'
 
+            GTFSnm_angledf = pd.DataFrame()
+            OSMwithGTFS = pd.DataFrame()
+            dfnomatch = pd.DataFrame()
+            GTFSnm_rect = pd.DataFrame()
+            GTFSnmRCT_posdf = pd.DataFrame()
+            OSM4routing = pd.DataFrame()
 
             # condition if the plugin have aleady run at list ones
-            if os.path.exists(main_files_csv):
-                ls_buses_df = pd.read_csv(ls_buses_done_csv)
-                prev_ls_buses = [str(bus) for bus in list(ls_buses_df.route_short_name)]
-                os.remove(ls_buses_done_csv)
-                del ls_buses_df
-                os.remove(Ttbls_selected_txt)
-                GTFSnm_angledf = pd.read_csv(GTFSnm_angledf_csv)
-                os.remove(GTFSnm_angledf_csv)
-                OSMwithGTFS = pd.read_csv(OSMwithGTFS_csv)
-                os.remove(OSMwithGTFS_csv)
-                dfnomatch = pd.read_csv(dfnomatch_csv)
-                os.remove(dfnomatch_csv)
-                GTFSnm_rect = pd.read_csv(GTFSnm_rect_csv)
-                os.remove(GTFSnm_rect_csv)
-                GTFSnmRCT_posdf = pd.read_csv(GTFSnmRCT_posdf_csv)
-                os.remove(GTFSnmRCT_posdf_csv)
-                OSM4routing = pd.read_csv(OSM4rout_file)
-                os.remove(OSM4rout_file)
-
-
-            else:
+            if not os.path.exists(main_files_csv):
                 transcript_main_files(main_files_fld,main_files_csv,OSM_ways_name,OSM_ways_gpkg,OSM_roads_name,OSM_roads_gpkg,OSM_roads_nameCSV,OSM_roads_csv,highway_speed_name,highway_speed_csv, bus_lanes_name, OSM_bus_lanes_gpkg,full_roads_name, full_roads_gpgk,Ttbls_selected_name, Ttbls_selected_txt)
                 
                 os.makedirs(road_temp_folder)
@@ -352,31 +359,53 @@ class OSMimport:
     
                 highway_average_speed(OSM_roads_csv,highway_speed_csv)
             
-                busroutes(bus_lanes_name, OSM_bus_lanes_gpkg,OSM_roads_gpkg)
+                busroutes(bus_lanes_name, OSM_bus_lanes_gpkg,OSM_roads_gpkg,highway_speed_csv)
 
-                full_city_roads(OSM_roads_gpkg,OSM_bus_lanes_gpkg, full_roads_gpgk,city_roads_name)
-                
-                prev_ls_buses = []
+                full_city_roads(OSM_roads_gpkg,OSM_bus_lanes_gpkg, full_roads_gpgk,city_roads_name,highway_speed_csv)
 
-                Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld)
-
-                os.makedirs(temp_folder_Ttbls)                            
+            if not os.path.exists(temp_folder_Ttbls):
+                os.makedirs(temp_folder_Ttbls)        
+            if not os.path.exists(temp_folder_GTFSstops):               
                 os.makedirs(temp_folder_GTFSstops)
+            if not os.path.exists(temproadfldr):
                 os.makedirs(temproadfldr)
+            if not os.path.exists(temp_GTFSnm_folder):
                 os.makedirs(temp_GTFSnm_folder)
+            if not os.path.exists(temp_rect_folder):
                 os.makedirs(temp_rect_folder)
+            if not os.path.exists(perdist):
                 os.makedirs(perdist)
+            if not os.path.exists(OSMstops_temp_folder):
                 os.makedirs(OSMstops_temp_folder)
+            if not os.path.exists(temp_OSM_folder):
                 os.makedirs(temp_OSM_folder)
+            if not os.path.exists(temp_GTFSpos_folder):
                 os.makedirs(temp_GTFSpos_folder)
+            if not os.path.exists(temp_OSM_for_routing):
                 os.makedirs(temp_OSM_for_routing)
 
-                GTFSnm_angledf = pd.DataFrame()
-                OSMwithGTFS = pd.DataFrame()
-                dfnomatch = pd.DataFrame()
-                GTFSnm_rect = pd.DataFrame()
-                GTFSnmRCT_posdf = pd.DataFrame()
-                OSM4routing = pd.DataFrame()
+            if os.path.exists(GTFSnm_angledf_csv):
+                GTFSnm_angledf = pd.read_csv(GTFSnm_angledf_csv)
+            if os.path.exists(OSMwithGTFS_csv):
+                OSMwithGTFS = pd.read_csv(OSMwithGTFS_csv)
+            if os.path.exists(dfnomatch_csv):
+                dfnomatch = pd.read_csv(dfnomatch_csv)
+            if os.path.exists(GTFSnm_rect_csv):
+                GTFSnm_rect = pd.read_csv(GTFSnm_rect_csv)
+            if os.path.exists(GTFSnmRCT_posdf_csv):
+                GTFSnmRCT_posdf = pd.read_csv(GTFSnmRCT_posdf_csv)
+            if os.path.exists(OSM4rout_file):
+                OSM4routing = pd.read_csv(OSM4rout_file)
+
+            if os.path.exists(ls_buses_done_csv):
+                ls_buses_df = pd.read_csv(ls_buses_done_csv)
+                prev_ls_buses = [str(bus) for bus in list(ls_buses_df.route_short_name)]
+                del ls_buses_df
+
+            try:
+                prev_ls_buses
+            except NameError:
+                prev_ls_buses = []
 
             ls_buses_selected = [item.text() for item in selected_items]
             print('the buses you have choosen are: '+str(ls_buses_selected))
@@ -385,9 +414,14 @@ class OSMimport:
             
             prev_ls_buses = prev_ls_buses + ls_buses            
             ls_buses_df = pd.DataFrame(prev_ls_buses).rename(columns={0:'route_short_name'})
+            if os.path.exists(ls_buses_done_csv):
+                os.remove(ls_buses_done_csv)
             ls_buses_df.to_csv(ls_buses_done_csv, index=False)
 
-            Selected_Ttbls(ls_buses,Ttbls_selected_txt,Ttbls_plus_csv,dwnldfld) 
+            if not os.path.exists(Ttbls_plus_csv):
+                Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld)
+
+            Selected_Ttbls(ls_buses,Ttbls_selected_txt,Ttbls_plus_csv) 
 
             print('the main Time Tables is ready, I start to create the dataframes for each single transport')
            
@@ -403,7 +437,6 @@ class OSMimport:
 
             if os.path.exists(lines_df_csv):
                 lines_df = pd.read_csv(lines_df_csv)
-                os.remove(lines_df_csv)
             else:
                 lines_df = pd.DataFrame()
             
@@ -438,7 +471,7 @@ class OSMimport:
                 Ttbl_file = lines_df.loc[i_row,'GTFSstop_times'] 
                 line = lines_df.loc[i_row,'line_name']
                 shrt_name = lines_df.loc[i_row,'route_short_name']
-                GTFSstops = preapare_GTFSstops_by_transport(stops,Ttbl_file,line,temp_folder_GTFSstops,shrt_name)
+                GTFSstops = preapare_GTFSstops_by_transport(stops_txt,Ttbl_file,line,temp_folder_GTFSstops,shrt_name)
                 lines_df.loc[i_row,'GTFSstops&segments'] = GTFSstops
                 i_row=i_row+1 
             del i_row
@@ -462,17 +495,49 @@ class OSMimport:
                 GTFSnm_angledf = pd.concat([GTFSnm_angledf,GTFSnm_angl_toconcat],ignore_index=True) 
                 i_row = i_row+1
 
+            if os.path.exists(GTFSnm_angledf_csv):
+                os.remove(GTFSnm_angledf_csv)
             GTFSnm_angledf.to_csv(GTFSnm_angledf_csv, index=False)
+
+            i_row = lines_df_row_init
+            while i_row < len(lines_df):
+                line = lines_df.loc[i_row,'line_name']
+                GTFSstops_angle =lines_df.loc[i_row,'GTFSstps_angle']
+                GTFSstops_angle_sidewalk_gpkg = str(temproadfldr)+'/GTFS'+str(line)+'_anlge_sidewalk.gpkg'
+                GTFSstops_angle_OSMonROADline_gpkg = str(temproadfldr)+'/GTFS'+str(line)+'_OSMonROADline.gpkg'
+                lines_df.loc[i_row,'GTFSstps_angle_sidewalk'] = GTFSstops_angle_sidewalk_gpkg
+                lines_df.loc[i_row,'GTFSstps_angle_OSMonROADline'] = GTFSstops_angle_OSMonROADline_gpkg
+                angle_onRD_sidewalk(GTFSstops_angle, GTFSstops_angle_sidewalk_gpkg,GTFSstops_angle_OSMonROADline_gpkg)
+                i_row = i_row+1
+
 
             print('Creating vector layers to join to the OSM stops')
 
             trnsprt_long = 0.00020
-
+            road_average_width = 0.00008
+            lines_df.to_csv(lines_df_csv,index=False)
             i_row = lines_df_row_init
             while i_row < len(lines_df):
-                GTFSstops_path = lines_df.loc[i_row,'GTFSstps_angle']
+
+                GTFSstops_angle_sidewalk_gpkg = lines_df.loc[i_row,'GTFSstps_angle_sidewalk']
                 line = lines_df.loc[i_row,'line_name']
-                lines_df.loc[i_row,'GTFSstps_rect'], lines_df.loc[i_row,'GTFSangle_csv']  = rectangles_bus(GTFSstops_path, trnsprt_long,temp_rect_folder,line)
+                GTFSstps_rect_sidewalk_csv = str(temp_rect_folder)+'/GTFSangl_sidewalk_'+str(line)+'.csv'
+                GTFSstps_rect_sidewalk_gpkg = str(temp_rect_folder)+'/rects_sidewalk_'+str(line)+'.gpkg'
+                rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, trnsprt_long,line, GTFSstps_rect_sidewalk_gpkg, GTFSstps_rect_sidewalk_csv)
+                lines_df.loc[i_row,'GTFSstps_rect_sidewalk_gpkg'] = GTFSstps_rect_sidewalk_gpkg
+                lines_df.loc[i_row,'GTFSstps_rect_sidewalk_csv'] = GTFSstps_rect_sidewalk_csv
+                
+                GTFSstops_path_OSMonROADline = lines_df.loc[i_row,'GTFSstps_angle_OSMonROADline']
+                GTFSstps_rect_OSMonROADline_gpkg = str(temp_rect_folder)+'/rects_OSMonROADline_'+str(line)+'.gpkg'
+                rectangles_OSMonROADline(GTFSstops_path_OSMonROADline,trnsprt_long, road_average_width,line,GTFSstps_rect_OSMonROADline_gpkg)
+                GTFSstps_rect_gpkg = str(temp_rect_folder)+'/rects_'+str(line)+'.gpkg'
+                lines_df.loc[i_row,'GTFSstps_rect'] = GTFSstps_rect_gpkg
+                ls_GTFSstps_rect = [GTFSstps_rect_sidewalk_gpkg,GTFSstps_rect_OSMonROADline_gpkg]
+                params = {'LAYERS':ls_GTFSstps_rect,
+                        'CRS':QgsCoordinateReferenceSystem('EPSG:4326'),
+                        'OUTPUT':GTFSstps_rect_gpkg}
+                processing.run("native:mergevectorlayers",params)
+
                 i_row = i_row + 1
 
             i_row = lines_df_row_init
@@ -504,9 +569,12 @@ class OSMimport:
                 dfnomatch = pd.concat ([dfnomatch,match],ignore_index=True)
                 
                 i_row = i_row + 1
-           
 
+            if os.path.exists(OSMwithGTFS_csv):
+                os.remove(OSMwithGTFS_csv)
             OSMwithGTFS.to_csv(OSMwithGTFS_csv, index=False)
+            if os.path.exists(dfnomatch_csv):
+                os.remove(dfnomatch_csv)
             dfnomatch.to_csv(dfnomatch_csv, index=False)
             
             # create list of GTFS rectangls that don't match with any OSM
@@ -526,6 +594,8 @@ class OSMimport:
                 
                 i_row += 1
             
+            if os.path.exists(GTFSnm_rect_csv):
+                os.remove(GTFSnm_rect_csv)
             GTFSnm_rect.to_csv(GTFSnm_rect_csv, index=False)
 
             i_row = lines_df_row_init
@@ -539,8 +609,9 @@ class OSMimport:
                 GTFSnmRCT_posdf = pd.concat([GTFSnmRCT_posdf,posdf],ignore_index=True)
                 i_row += 1
             
-            
-            GTFSnmRCT_posdf.to_csv(GTFSnmRCT_posdf_csv)
+            if os.path.exists(GTFSnmRCT_posdf_csv):
+                os.remove(GTFSnmRCT_posdf_csv)
+            GTFSnmRCT_posdf.to_csv(GTFSnmRCT_posdf_csv, index=False)
               
             i_row = lines_df_row_init
             while i_row < len(lines_df):
@@ -554,25 +625,31 @@ class OSMimport:
                 OSM4r_toconcat = pd.read_csv(OSMstops_forrouting)
                 OSM4routing = pd.concat([OSM4routing,OSM4r_toconcat],ignore_index=True)
                 i_row += 1
-                      
+            
+            if os.path.exists(OSM4rout_file):
+                os.remove(OSM4rout_file)         
             OSM4routing.to_csv(OSM4rout_file,index=False)
 
             # publishing the back ground for better read of the data
-            uri = "contextualWMSLegend=0&crs=EPSG:4326&dpiMode=7&featureCount=10&format=image/jpeg&layers=ch.swisstopo.swissimage&styles=default&tilePixelRatio=0&url=https://wms.geo.admin.ch/"
-            CHimage_layer = QgsRasterLayer(uri, "SWISSIMAGE 10 cm", 'wms')
-            QgsProject.instance().addMapLayer(CHimage_layer)
+            if not QgsProject.instance().mapLayersByName('SWISSIMAGE 10 cm'):
+                uri = "contextualWMSLegend=0&crs=EPSG:4326&dpiMode=7&featureCount=10&format=image/jpeg&layers=ch.swisstopo.swissimage&styles=default&tilePixelRatio=0&url=https://wms.geo.admin.ch/"
+                CHimage_layer = QgsRasterLayer(uri, "SWISSIMAGE 10 cm", 'wms')
+                QgsProject.instance().addMapLayer(CHimage_layer)
 
-            uri = "type=xyz&zmin=0&zmax=19&url=http://tile.openstreetmap.org/{z}/{x}/{y}.png"
-            OSMmap_layer = QgsRasterLayer(uri, "OSM Standard", 'wms')
-            QgsProject.instance().addMapLayer(OSMmap_layer)
+            if not QgsProject.instance().mapLayersByName('OSM Standard'):
+                uri = "type=xyz&zmin=0&zmax=19&url=http://tile.openstreetmap.org/{z}/{x}/{y}.png"
+                OSMmap_layer = QgsRasterLayer(uri, "OSM Standard", 'wms')
+                QgsProject.instance().addMapLayer(OSMmap_layer)
 
-            city_roads_layer = QgsVectorLayer(OSM_roads_gpkg,city_roads_name,"ogr")
-            QgsProject.instance().addMapLayer(city_roads_layer)
+            if not QgsProject.instance().mapLayersByName(city_roads_name):
+                city_roads_layer = QgsVectorLayer(OSM_roads_gpkg,city_roads_name,"ogr")
+                QgsProject.instance().addMapLayer(city_roads_layer)
 
             # publishing the trips on the canvas
-            
+            lines_df = lines_df.astype({'route_short_name':'str'})
             ls_buses_todisp = [str(bus) for bus in ls_buses_selected]
             ls_buses_select_df = pd.DataFrame(ls_buses_todisp).rename(columns={0:'route_short_name'})
+            ls_buses_select_df = ls_buses_select_df.astype({'route_short_name':'str'})
             ls_buses_select_df = ls_buses_select_df.merge(lines_df, how='left', on='route_short_name')
             ls_trnsprt_todisplay = list(ls_buses_select_df.line_name.unique())
             ls_files = os.listdir(temp_OSM_for_routing)
@@ -581,11 +658,14 @@ class OSMimport:
             for trnsprt in ls_trnsprt_todisplay:
                 to_display = [gpkg for gpkg in ls_gpkg if trnsprt in gpkg]
                 for layer in to_display:
-                    OSM_trip4rout_gpkg = str(temp_OSM_for_routing)+'/'+str(layer)
-                    OSM_trip4rout_layer = QgsVectorLayer(OSM_trip4rout_gpkg,str(layer[:-5]),"ogr")
-                    QgsProject.instance().addMapLayer(OSM_trip4rout_layer)
+                    if not QgsProject.instance().mapLayersByName(str(layer[:-5])):
+                        OSM_trip4rout_gpkg = str(temp_OSM_for_routing)+'/'+str(layer)
+                        OSM_trip4rout_layer = QgsVectorLayer(OSM_trip4rout_gpkg,str(layer[:-5]),"ogr")
+                        QgsProject.instance().addMapLayer(OSM_trip4rout_layer)
 
             # saving the lines df
+            if os.path.exists(lines_df_csv):
+                os.remove(lines_df_csv)   
             lines_df.to_csv(lines_df_csv,index=False)
             
             print('Done! : your files are ready')
