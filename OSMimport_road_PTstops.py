@@ -436,7 +436,7 @@ class OSMimport:
             lines_df_csv = str(dwnldfld)+'/lines_files_list.csv'
 
             if os.path.exists(lines_df_csv):
-                lines_df = pd.read_csv(lines_df_csv)
+                lines_df = pd.read_csv(lines_df_csv,dtype={'route_short_name':str})
             else:
                 lines_df = pd.DataFrame()
             
@@ -515,7 +515,7 @@ class OSMimport:
 
             trnsprt_long = 0.00020
             road_average_width = 0.00008
-            lines_df.to_csv(lines_df_csv,index=False)
+            
             i_row = lines_df_row_init
             while i_row < len(lines_df):
 
@@ -646,7 +646,6 @@ class OSMimport:
                 QgsProject.instance().addMapLayer(city_roads_layer)
 
             # publishing the trips on the canvas
-            lines_df = lines_df.astype({'route_short_name':'str'})
             ls_buses_todisp = [str(bus) for bus in ls_buses_selected]
             ls_buses_select_df = pd.DataFrame(ls_buses_todisp).rename(columns={0:'route_short_name'})
             ls_buses_select_df = ls_buses_select_df.astype({'route_short_name':'str'})
