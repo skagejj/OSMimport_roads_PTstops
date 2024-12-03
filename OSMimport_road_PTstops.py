@@ -55,7 +55,9 @@ from .core_functions import (busroutes,
                             highway_average_speed, 
                             transcript_main_files,
                             Ttbls_plus,
-                            angle_onRD_sidewalk
+                            angle_onRD_sidewalk,
+                            shape_assignement,
+                            if_not_make
 )
 
 class OSMimport:
@@ -244,6 +246,7 @@ class OSMimport:
             temp_folder = 'OSM_data'
             road_temp_folder = os.path.join(dwnldfld,temp_folder)
             
+            trips_txt = str(dwnldfld)+'/trips.txt'
 
             stops_txt = str(dwnldfld)+'/stops.txt'
             stops = pd.read_csv(stops_txt)
@@ -297,6 +300,9 @@ class OSMimport:
             main_files_fld = os.path.join(str(dwnldfld)+'/'+str(temp_folder))
             main_files_csv = str(dwnldfld)+'/'+str(temp_folder)+'/main_files.csv'
             
+            temp_folder = 'temp/trip_id_assignement'
+            folder_trip_id_assign = os.path.join(dwnldfld,temp_folder)
+
             ls_buses_done_name = 'buses'
             ls_buses_done_csv = str(main_files_fld)+'/'+str(ls_buses_done_name)+'.csv'
 
@@ -363,26 +369,18 @@ class OSMimport:
 
                 full_city_roads(OSM_roads_gpkg,OSM_bus_lanes_gpkg, full_roads_gpgk,city_roads_name,highway_speed_csv)
 
-            if not os.path.exists(temp_folder_Ttbls):
-                os.makedirs(temp_folder_Ttbls)        
-            if not os.path.exists(temp_folder_GTFSstops):               
-                os.makedirs(temp_folder_GTFSstops)
-            if not os.path.exists(temproadfldr):
-                os.makedirs(temproadfldr)
-            if not os.path.exists(temp_GTFSnm_folder):
-                os.makedirs(temp_GTFSnm_folder)
-            if not os.path.exists(temp_rect_folder):
-                os.makedirs(temp_rect_folder)
-            if not os.path.exists(perdist):
-                os.makedirs(perdist)
-            if not os.path.exists(OSMstops_temp_folder):
-                os.makedirs(OSMstops_temp_folder)
-            if not os.path.exists(temp_OSM_folder):
-                os.makedirs(temp_OSM_folder)
-            if not os.path.exists(temp_GTFSpos_folder):
-                os.makedirs(temp_GTFSpos_folder)
-            if not os.path.exists(temp_OSM_for_routing):
-                os.makedirs(temp_OSM_for_routing)
+            if_not_make(temp_folder_Ttbls)
+            if_not_make(temp_folder_GTFSstops)
+            if_not_make(temproadfldr)
+            if_not_make(temp_GTFSnm_folder)
+            if_not_make(temp_rect_folder)
+            if_not_make(perdist)
+            if_not_make(OSMstops_temp_folder)
+            if_not_make(temp_OSM_folder)
+            if_not_make(temp_GTFSpos_folder)
+            if_not_make(temp_OSM_for_routing)
+            if_not_make(folder_trip_id_assign)
+
 
             if os.path.exists(GTFSnm_angledf_csv):
                 GTFSnm_angledf = pd.read_csv(GTFSnm_angledf_csv)
@@ -419,7 +417,7 @@ class OSMimport:
             ls_buses_df.to_csv(ls_buses_done_csv, index=False)
 
             if not os.path.exists(Ttbls_plus_csv):
-                Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld)
+                Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld,trips_txt)
 
             Selected_Ttbls(ls_buses,Ttbls_selected_txt,Ttbls_plus_csv) 
 
@@ -471,11 +469,22 @@ class OSMimport:
                 Ttbl_file = lines_df.loc[i_row,'GTFSstop_times'] 
                 line = lines_df.loc[i_row,'line_name']
                 shrt_name = lines_df.loc[i_row,'route_short_name']
-                GTFSstops = preapare_GTFSstops_by_transport(stops_txt,Ttbl_file,line,temp_folder_GTFSstops,shrt_name)
+                GTFSstops, Ttbl_with_sequences_csv = preapare_GTFSstops_by_transport(stops_txt,Ttbl_file,line,temp_folder_GTFSstops,shrt_name,temp_folder_Ttbls)
                 lines_df.loc[i_row,'GTFSstops&segments'] = GTFSstops
+                lines_df.loc[i_row,'GTFSstop_times_with_seq'] = Ttbl_with_sequences_csv
                 i_row=i_row+1 
             del i_row
             
+            i_row = lines_df_row_init
+            while i_row < len(lines_df):
+                line = lines_df.loc[i_row,'line_name']
+                Ttbl_file = lines_df.loc[i_row,'GTFSstop_times']
+                GTFSstops_csv = lines_df.loc[i_row,'GTFSstops&segments']
+                line_trip_csv = str(folder_trip_id_assign)+'/'+str(line)+'_trip_assignement.csv'
+                shape_assignement(GTFSstops_csv,Ttbl_file,line_trip_csv,trips_txt)
+                lines_df.loc[i_row,'trip_assignement'] = line_trip_csv
+                i_row += 1
+
             city_roads_layer = QgsVectorLayer(OSM_roads_gpkg,city_roads_name,"ogr")
 
             print ('... adding the angles to the GTFSstops')
@@ -668,9 +677,5 @@ class OSMimport:
             lines_df.to_csv(lines_df_csv,index=False)
             
             print('Done! : your files are ready')
-
-
-
-
 
             

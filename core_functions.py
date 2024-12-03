@@ -21,6 +21,10 @@ import os
 import math 
 import statistics as stat
 
+def if_not_make(folder_to_make):
+    if not os.path.exists(folder_to_make):
+        os.makedirs(folder_to_make)
+
 def highway_average_speed(OSM_roads_csv,highway_speed_csv): 
            
     city_roads = pd.read_csv(OSM_roads_csv,low_memory=False)
@@ -153,7 +157,7 @@ def full_city_roads(OSM_roads_gpkg,bus_lanes_gpkg, full_roads_gpgk, city_roads_n
               'OUTPUT':full_roads_gpgk}
     processing.run("native:mergevectorlayers",params)
 
-def Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld):
+def Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld,trips_txt):
     Ttbls = pd.read_csv(Ttlbs_txt)
     Ttbls['prnt_stp_id']= ""
 
@@ -167,7 +171,8 @@ def Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld):
     i_row = 0
 
     # merge route_id
-    trips = pd.read_csv(str(dwnldfld)+'/trips.txt')
+    
+    trips = pd.read_csv(trips_txt)
     trps = trips[['trip_id','route_id']]
     Ttbls = pd.merge(Ttbls,trps,on='trip_id', how='left')
     
@@ -226,7 +231,7 @@ def time_tables_perTransport(rt,Ttbls,tempfldr,lstrnsprt,trnsprt_type ):
     return Ttbl, nametbl, Ttbl_file, rt_srt_nm
 
     
-def preapare_GTFSstops_by_transport(stops_txt, Ttbl_file,trnsprt,tempfolder,shrt_name):
+def preapare_GTFSstops_by_transport(stops_txt, Ttbl_file,trnsprt,tempfolder,shrt_name,tempfolderstptimes):
     stps = pd.read_csv(stops_txt, dtype={'stop_id':str})
     #load the stop times (Time Table) ot the transport
     Ttbl_unsorted = pd.read_csv(Ttbl_file, dtype={'stop_id':str})
@@ -334,6 +339,9 @@ def preapare_GTFSstops_by_transport(stops_txt, Ttbl_file,trnsprt,tempfolder,shrt
         i_row += 1
     Ttbl = Ttbl.astype({'trip':'int','pos':'int'})
 
+    Ttbl_with_sequences_csv = str(tempfolderstptimes)+'/'+str(trnsprt)+'_stops_times_with_seq.csv'
+    Ttbl.to_csv(Ttbl_with_sequences_csv, index=False)
+
     # most frequent stops
     ls_GTFS_stops = list(Ttbl.seq_stpID.unique())
     most_freq_stps = pd.DataFrame(ls_GTFS_stops)
@@ -402,10 +410,73 @@ def preapare_GTFSstops_by_transport(stops_txt, Ttbl_file,trnsprt,tempfolder,shrt
     
     most_freq_stps['route_short_name'] = shrt_name
     
-
     GTFSstops_path = str(tempfolder)+'/'+str(trnsprt)+'_stops_segments.csv'
     most_freq_stps.to_csv(GTFSstops_path, index =False)
-    return GTFSstops_path
+    return GTFSstops_path, Ttbl_with_sequences_csv
+
+def shape_assignement(GTFSstops_csv,Ttbl_file,line_trip_csv,trips_txt):
+        
+    GTFSstops = pd.read_csv(GTFSstops_csv,dtype={'pos':'int','trip':'int','prnt_stp_id':'str','stop_id':'str'})
+    Ttbl = pd.read_csv(Ttbl_file,dtype={'pos':'int','trip':'int','prnt_stp_id':'str','stop_id':'str'})
+
+    i_row = 0
+    while i_row < len(GTFSstops):
+        GTFSstops.loc[i_row,'line_trip'] = str(GTFSstops.loc[i_row,'line_name'])+'_trip'+str(GTFSstops.loc[i_row,'trip'])
+        i_row +=1
+
+
+    line_trip_df = pd.DataFrame(GTFSstops.line_trip.unique()).rename(columns={0:'line_trip'})
+    str_prnt_stp = ''
+    i_row = 0
+    while i_row < len(line_trip_df):
+        GTFSstops_line_trip = GTFSstops[GTFSstops['line_trip'] == line_trip_df.loc[i_row,'line_trip'] ].reset_index(drop=True)
+        str_prnt_stp = ''
+        i_row2 = 0
+        while i_row2 < len(GTFSstops_line_trip):
+            str_prnt_stp = str(str_prnt_stp)+' '+str(GTFSstops_line_trip.loc[i_row2,'prnt_stp_id'])
+            i_row2 += 1
+        
+        line_trip_df.loc[i_row,'main_seq'] = str_prnt_stp
+        i_row += 1
+
+    trip_id_df = pd.DataFrame(Ttbl.trip_id.unique()).rename(columns={0:'trip_id'})
+    str_prnt_stp = ''
+    i_row = 0
+    while i_row < len(trip_id_df):
+        Ttbl_trip = Ttbl[Ttbl['trip_id'] == trip_id_df.loc[i_row,'trip_id'] ].reset_index(drop=True)
+        str_prnt_stp = ''
+        i_row2 = 0
+        while i_row2 < len(Ttbl_trip):
+            str_prnt_stp = str(str_prnt_stp)+' '+str(Ttbl_trip.loc[i_row2,'prnt_stp_id'])
+            i_row2 += 1
+        
+        trip_id_df.loc[i_row,'seq'] = str_prnt_stp
+        i_row += 1
+
+    i_row = 0
+    while i_row < len(trip_id_df):
+        line_trip = ''
+        i_row2 = 0
+        while line_trip == '':
+            if str(trip_id_df.loc[i_row,'seq']) in str(line_trip_df.loc[i_row2,'main_seq']):
+                line_trip = str(line_trip_df.loc[i_row2,'line_trip'])
+            i_row2 += 1
+            
+        trip_id_df.loc[i_row,'line_trip'] = line_trip
+        i_row += 1
+
+    trips = pd.read_csv(trips_txt,index_col='trip_id',dtype='str')
+
+    i_row = 0
+    while i_row < len(trip_id_df):
+        trip_idx = str(trip_id_df.loc[i_row,'trip_id'])
+        trips.loc[trip_idx,'shape_id'] = trip_id_df.loc[i_row,'line_trip']
+        i_row += 1
+
+    os.remove(trips_txt)
+    trips.to_csv(trips_txt)
+
+    line_trip_df.to_csv(line_trip_csv,index=False)
 
 def angles(roadlayer,trnsprt,trnsprt_GTFSstops_file,temp_road_folder,GTFSnm_folder):
     GTFSstopspath = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(trnsprt_GTFSstops_file,"epsg:4326", ",", "stop_lon", "stop_lat")
@@ -823,7 +894,7 @@ def joinNEWandValidOSM(newOSMpos,GTFSnomatch_RD,OSMintersectGTFS,GTFSstps_seg,te
         OSMstops_trip_csv = str(temp_OSM_for_routing)+'/OSM4routing_'+str(trip)+'.csv'
         OSMstops_trip_gpkg = str(temp_OSM_for_routing)+'/OSM4routing_'+str(trip)+'.gpkg'
         OSMstops_trip.to_csv(OSMstops_trip_csv, index=False)
-        OSM4rout_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(OSMstops_trip_csv,"EPSG:4326", ",", "lon", "lat")
+        OSM4rout_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}&field=trip:integer".format(OSMstops_trip_csv,"EPSG:4326", ",", "lon", "lat")
         OSM4rout_layer = QgsVectorLayer(OSM4rout_path,"OSM_for_routing","delimitedtext")
         QgsVectorFileWriter.writeAsVectorFormat(OSM4rout_layer, OSMstops_trip_gpkg, "UTF-8", OSM4rout_layer.crs(), "GPKG")
         os.remove(OSMstops_trip_csv)
