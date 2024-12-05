@@ -25,6 +25,26 @@ def if_not_make(folder_to_make):
     if not os.path.exists(folder_to_make):
         os.makedirs(folder_to_make)
 
+def downloading_ways(extent,extent_quickosm,OSM_ways_gpkg):
+    params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    way["highway"="service"]('+str(extent)+');\n    way["highway"="living_street"]('+str(extent)+');\n    way["highway"="motorway"]('+str(extent)+');\n    way["highway"="primary"]('+str(extent)+');\n    way["highway"="secondary"]('+str(extent)+');\n    way["highway"="tertiary"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="unclassified"]('+str(extent)+');\n    way["highway"="motorway_link"]('+str(extent)+');\n    way["highway"="primary_link"]('+str(extent)+');\n    way["highway"="secondary_link"]('+str(extent)+');\n    way["highway"="tertiary_link"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="motorway_junction"]('+str(extent)+');\n    \n  \t\n);\n(._;>;);\nout body;',
+                    'TIMEOUT':180,
+                    'SERVER':'https://overpass-api.de/api/interpreter',
+                    'EXTENT':extent_quickosm,
+                    'AREA':'',
+                    'FILE': OSM_ways_gpkg}
+    processing.run("quickosm:downloadosmdatarawquery", params)
+            
+
+def downloading_tramway(extent, extent_quickosm,OSM_tramways_gpkg):
+
+    params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    way["railway"="tram"]('+str(extent)+');\n    \n  \t\n);\n(._;>;);\nout body;',
+            'TIMEOUT':180,
+            'SERVER':'https://overpass-api.de/api/interpreter',
+            'EXTENT':extent_quickosm,
+            'AREA':'',
+            'FILE': OSM_tramways_gpkg}
+    processing.run("quickosm:downloadosmdatarawquery", params)
+
 def highway_average_speed(OSM_roads_csv,highway_speed_csv): 
            
     city_roads = pd.read_csv(OSM_roads_csv,low_memory=False)
@@ -178,7 +198,7 @@ def Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld,trips_txt):
     
     #join the route_short_name 
     routes = pd.read_csv(str(dwnldfld)+'/routes.txt')
-    rts = routes.filter(['route_id','route_short_name'],axis=1)
+    rts = routes.filter(['route_id','route_short_name','trnsprt','trnsp_shrt_name'],axis=1)
 
     Ttbls = Ttbls.merge(rts,on='route_id', how='left')
     
@@ -189,16 +209,19 @@ def Selected_Ttbls(ls_buses,Ttbls_selected_txt,Ttbls_plus_csv):
     
     Ttbls = pd.read_csv(Ttbls_plus_csv)
 
-    Ttbls_selected = Ttbls[Ttbls['route_short_name'].isin(ls_buses) ]
+    Ttbls_selected = Ttbls[Ttbls['trnsp_shrt_name'].isin(ls_buses) ]
 
     if os.path.exists(Ttbls_selected_txt):
         os.remove(Ttbls_selected_txt)
     Ttbls_selected.to_csv(Ttbls_selected_txt, index=False)
 
-def time_tables_perTransport(rt,Ttbls,tempfldr,lstrnsprt,trnsprt_type ):
+def time_tables_perTransport(rt,Ttbls,tempfldr,lstrnsprt):
     
     Ttbl = Ttbls[Ttbls.route_id == rt]
     num = str(Ttbl['route_short_name'].iloc[0])
+    trnsprt_type  = str(Ttbl['trnsprt'].iloc[0])
+    trnsp_shrt_name  = str(Ttbl['trnsp_shrt_name'].iloc[0])
+
     if re.findall('[+]',num):
         num = str(re.findall('[a-zA-Z]+|[0-9]+',num)[0])+'plus'
     id_line = 0
@@ -228,7 +251,7 @@ def time_tables_perTransport(rt,Ttbls,tempfldr,lstrnsprt,trnsprt_type ):
     Ttbl_file = str(tempfldr)+'/'+str(nametbl)+'_stop_times.csv'
     Ttbl.to_csv(Ttbl_file, index=False)
     rt_srt_nm = str(Ttbl['route_short_name'].iloc[0])
-    return Ttbl, nametbl, Ttbl_file, rt_srt_nm
+    return Ttbl, nametbl, Ttbl_file, rt_srt_nm, trnsprt_type, trnsp_shrt_name
 
     
 def preapare_GTFSstops_by_transport(stops_txt, Ttbl_file,trnsprt,tempfolder,shrt_name,tempfolderstptimes):
@@ -478,7 +501,77 @@ def shape_assignement(GTFSstops_csv,Ttbl_file,line_trip_csv,trips_txt):
 
     line_trip_df.to_csv(line_trip_csv,index=False)
 
-def angles(roadlayer,trnsprt,trnsprt_GTFSstops_file,temp_road_folder,GTFSnm_folder):
+def angles_tram(city_rails_layer,trnsprt,trnsprt_GTFSstops_file,temp_road_folder,GTFSnm_folder):
+    GTFSstopspath = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(trnsprt_GTFSstops_file,"epsg:4326", ",", "stop_lon", "stop_lat")
+    GTFSstopslayer = QgsVectorLayer(GTFSstopspath,str(trnsprt)+"_GTFSstops","delimitedtext")
+    params = {'INPUT':GTFSstopslayer,
+              'DISTANCE':0.00150,
+              'SEGMENTS':5,'END_CAP_STYLE':0,'JOIN_STYLE':0,
+              'MITER_LIMIT':2,'DISSOLVE':True,'SEPARATE_DISJOINT':False,
+              'OUTPUT':str(temp_road_folder)+'/bf_'+str(trnsprt)+'_GTFSstops.gpkg'}
+    processing.run("native:buffer", params)
+    del params
+
+    #clippint roads to make it smaller
+    params = {'INPUT':city_rails_layer,
+              'OVERLAY':str(temp_road_folder)+'/bf_'+str(trnsprt)+'_GTFSstops.gpkg',
+              'OUTPUT':str(temp_road_folder)+'/cl_'+str(trnsprt)+'_swissroad.gpkg'}        
+    processing.run("native:clip", params)
+    del params
+    
+    spl_file = str(temp_road_folder)+'/Spl_'+str(trnsprt)+'_swissroad.gpkg'
+        
+    #splitting in to more simple lines 
+    params = {'INPUT':str(temp_road_folder)+'/cl_'+str(trnsprt)+'_swissroad.gpkg',
+              'OUTPUT':spl_file}
+    processing.run("native:multiparttosingleparts", params)
+    del params
+
+    #splitting in smaller peaces
+    #params = {'INPUT':str(temp_road_folder)+'/multiL_'+str(trnsprt)+'_swissroad.gpkg',
+    #          'LENGTH':0.00007,
+    #          'OUTPUT':spl_file}
+    #processing.run("native:splitlinesbylength", params)
+
+    #expression to calculate angle_at_vertex($geometry,0)    
+    splt_roads = QgsVectorLayer(spl_file,"Spl_"+str(trnsprt)+"_roads","ogr")
+    pr = splt_roads.dataProvider()
+    pr.addAttributes([QgsField('stp_angl',QVariant.Double)])
+    splt_roads.updateFields
+    
+    expression = QgsExpression('angle_at_vertex($geometry,0)')
+
+    context = QgsExpressionContext()
+    context.appendScopes(QgsExpressionContextUtils.globalProjectLayerScopes(splt_roads))
+
+
+    with edit(splt_roads):
+        for f in splt_roads.getFeatures():
+            context.setFeature(f)
+            f['stp_angl'] = expression.evaluate(context)
+            splt_roads.updateFeature(f)
+    
+    anglefile = str(temp_road_folder)+'/GTFS'+str(trnsprt)+'_angle.gpkg'
+    GTFSnomatchangl = str(GTFSnm_folder)+'/GTFS_NOmatch_RD'+str(trnsprt)+'.gpkg'
+    GTFS_NMangcsv = str(GTFSnm_folder)+'/GTFS_NOmatch_RD'+str(trnsprt)+'.csv'
+
+    # join attributes by nearest for angle
+    params = {'INPUT':GTFSstopslayer,
+            'INPUT_2':splt_roads,
+            'FIELDS_TO_COPY':['full_id','osm_id','osm_type','name','highway','stp_angl'],
+            'DISCARD_NONMATCHING':True,
+            'PREFIX':'nrstrd_',
+            'NEIGHBORS':1,
+            'MAX_DISTANCE':0.00015,
+            'OUTPUT':anglefile,
+            'NON_MATCHING':GTFSnomatchangl}
+    processing.run("native:joinbynearest", params)
+    GTFSnomatchplt = QgsVectorLayer(GTFSnomatchangl,"GTFSnmRD"+str(trnsprt),"ogr")
+    QgsVectorFileWriter.writeAsVectorFormat(GTFSnomatchplt,GTFS_NMangcsv,"utf-8",driverName = "CSV")
+    del params, context, expression
+    return anglefile, GTFSnomatchangl, GTFS_NMangcsv, spl_file
+
+def angles_buses(roadlayer,trnsprt,trnsprt_GTFSstops_file,temp_road_folder,GTFSnm_folder):
     GTFSstopspath = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(trnsprt_GTFSstops_file,"epsg:4326", ",", "stop_lon", "stop_lat")
     GTFSstopslayer = QgsVectorLayer(GTFSstopspath,str(trnsprt)+"_GTFSstops","delimitedtext")
     params = {'INPUT':GTFSstopslayer,
@@ -555,11 +648,16 @@ def angle_onRD_sidewalk(GTFSstops_angle, GTFSstops_angle_sidewalk_gpkg,GTFSstops
                 'FAIL_OUTPUT': GTFSstops_angle_OSMonROADline_gpkg}
     processing.run("native:extractbyexpression", params)
 
-def rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, trnsprt_long, trnsprt, GTFSstps_rect_sidewalk_gpkg, GTFSstps_rect_sidewalk_csv):
+def rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, buses_long,tram_long, line_name, GTFSstps_rect_sidewalk_gpkg, GTFSstps_rect_sidewalk_csv,trnsprt_type):
 
     rect_type = 'sidewalk'
+    
+    if trnsprt_type == 'Tram':
+        trnsprt_long = tram_long
+    else:
+        trnsprt_long = buses_long
 
-    GTFS_angl = QgsVectorLayer(GTFSstops_angle_sidewalk_gpkg,'angl_'+str(trnsprt),'ogr')
+    GTFS_angl = QgsVectorLayer(GTFSstops_angle_sidewalk_gpkg,'angl_'+str(line_name),'ogr')
     pr = GTFS_angl.dataProvider()
     pr.addAttributes([QgsField("rect_angle", QVariant.Double),
                     QgsField("rect_x2", QVariant.Double),
@@ -599,7 +697,7 @@ def rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, trnsprt_long, trnsprt, GT
     GTFS_angldf.to_csv(GTFSstps_rect_sidewalk_csv,index=False)
 
     GTFScsvpath = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(GTFSstps_rect_sidewalk_csv,"epsg:4326", ",", "rect_x", "rect_y")
-    GTFS_angl_layer = QgsVectorLayer(GTFScsvpath ,'GTFSangl_'+str(trnsprt),"delimitedtext")
+    GTFS_angl_layer = QgsVectorLayer(GTFScsvpath ,'GTFSangl_'+str(line_name),"delimitedtext")
 
     params = {
         'INPUT': GTFS_angl_layer,
@@ -615,9 +713,15 @@ def rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, trnsprt_long, trnsprt, GT
     del params, expression1,expression2,expression3
     # return rectfile, GTFScsv
 
-def rectangles_OSMonROADline(GTFSstops_path_OSMonROADline,trnsprt_long, road_average_width,line, GTFSstps_rect_OSMonROADline_gpkg):
+def rectangles_OSMonROADline(GTFSstops_path_OSMonROADline,buses_long, tram_long, road_average_width,line, GTFSstps_rect_OSMonROADline_gpkg, trnsprt_type):
     
-    long = trnsprt_long*2
+    if trnsprt_type == 'Tram':
+        trnsprt_long = tram_long
+    else:
+        trnsprt_long = buses_long
+
+
+    long = trnsprt_long*4
     params = {
                 'INPUT': str(GTFSstops_path_OSMonROADline),
                 'SHAPE': 0,
@@ -663,8 +767,15 @@ def rectangles_OSMonROADline(GTFSstops_path_OSMonROADline,trnsprt_long, road_ave
     del params, lstodelete, idtodelete
     
 
-def OSM_PTstps_dwnld(extent, extent_quickosm,OSM_PTstp_rel_gpkg,OSM_PTstp_gpkg,shrt_name, OSM_PTstp_rel_name, OSM_PTstp_name):
-    params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    relation["route"="bus"]["ref"="'+str(shrt_name)+'"]('+str(extent)+');\n);\n(._;>;);\nout body;',
+def OSM_PTstps_dwnld(extent, extent_quickosm,OSM_PTstp_rel_gpkg,OSM_PTstp_gpkg,shrt_name, OSM_PTstp_rel_name, OSM_PTstp_name, trnsprt_type):
+    if trnsprt_type == 'Tram':
+        route = 'tram'
+        route_cond = '"railway" is \'tram_stop\''
+    else:
+        route = 'bus'
+        route_cond = '"highway" is \'bus_stop\''
+    
+    params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    relation["route"="'+str(route)+'"]["ref"="'+str(shrt_name)+'"]('+str(extent)+');\n);\n(._;>;);\nout body;',
                     'TIMEOUT':180,
                     'SERVER':'https://overpass-api.de/api/interpreter',
                     'EXTENT':extent_quickosm,
@@ -675,7 +786,7 @@ def OSM_PTstps_dwnld(extent, extent_quickosm,OSM_PTstp_rel_gpkg,OSM_PTstp_gpkg,s
     OSM_PTstp_rel_layer_file = str(OSM_PTstp_rel_gpkg)+'|layername='+str(OSM_PTstp_rel_name)+'_points'
     OSM_PTstp_rel_layer =  QgsVectorLayer(OSM_PTstp_rel_layer_file,OSM_PTstp_name,"ogr")
     
-    bus_stops_selection = '"highway" is \'bus_stop\' OR "public_transport" is \'stop_position\''
+    bus_stops_selection = str(route_cond) +' OR "public_transport" is \'stop_position\''
     params = {'INPUT':OSM_PTstp_rel_layer,
             'EXPRESSION':bus_stops_selection,
             'OUTPUT':OSM_PTstp_gpkg}
@@ -743,16 +854,22 @@ def OSMintersecGTFS(rectangles,OSMgpkg,tempOSMfolder,shrt_name):
     del params
     return OSMjnGTFS, OSMnomatch,OSMjoinGTFScsv, OSMnomatchGTFScsv
 
-def stp_posGTFSnm_rect(GTFSnm_rectCSV,trnsprt,splt_roads,temp_posRCT_folder,trnsprt_long):
-    GTFSnm_rect_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(GTFSnm_rectCSV,"epsg:4326", ",", "stop_lon", "stop_lat")
-    GTFSnm_rect_layer = QgsVectorLayer(GTFSnm_rect_path,'GTFSNMrect_'+str(trnsprt) ,"delimitedtext")
+def stp_posGTFSnm_rect(GTFSnm_rectCSV,line_name,splt_roads,temp_posRCT_folder,buses_long,tram_long, trnsprt_type):
+
+    if trnsprt_type == 'Tram':
+        trnsprt_long = tram_long
+    else:
+        trnsprt_long = buses_long
     
-    GTFS_nmRCT_pos_CSV1 = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(trnsprt)+'_1.csv'
-    GTFS_nmRCT_pos_CSV2 = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(trnsprt)+'_2.csv'
-    GTFS_nmRCT_pos_CSV3 = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(trnsprt)+'_3.csv'
-    GTFS_nmRCT_NEWpos_CSV = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(trnsprt)+'.csv'
-    GTFS_pos1  = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(trnsprt)+'_1.gpkg'
-    GTFS_pos  = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(trnsprt)+'.gpkg'
+    GTFSnm_rect_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(GTFSnm_rectCSV,"epsg:4326", ",", "stop_lon", "stop_lat")
+    GTFSnm_rect_layer = QgsVectorLayer(GTFSnm_rect_path,'GTFSNMrect_'+str(line_name) ,"delimitedtext")
+    
+    GTFS_nmRCT_pos_CSV1 = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(line_name)+'_1.csv'
+    GTFS_nmRCT_pos_CSV2 = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(line_name)+'_2.csv'
+    GTFS_nmRCT_pos_CSV3 = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(line_name)+'_3.csv'
+    GTFS_nmRCT_NEWpos_CSV = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(line_name)+'.csv'
+    GTFS_pos1  = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(line_name)+'_1.gpkg'
+    GTFS_pos  = str(temp_posRCT_folder)+'/GTFSnmRCT_pos_'+str(line_name)+'.gpkg'
     
     params = {'INPUT':GTFSnm_rect_layer,
             'INPUT_2':splt_roads,
@@ -766,7 +883,7 @@ def stp_posGTFSnm_rect(GTFSnm_rectCSV,trnsprt,splt_roads,temp_posRCT_folder,trns
 
     
 
-    GTFS_posangl = QgsVectorLayer(GTFS_pos1,'GTFSnmRCT_posangl_'+str(trnsprt) ,"ogr")
+    GTFS_posangl = QgsVectorLayer(GTFS_pos1,'GTFSnmRCT_posangl_'+str(line_name) ,"ogr")
     
     pr = GTFS_posangl.dataProvider()
     pr.addAttributes([QgsField("pos_angl", QVariant.Double)])
@@ -797,13 +914,20 @@ def stp_posGTFSnm_rect(GTFSnm_rectCSV,trnsprt,splt_roads,temp_posRCT_folder,trns
     GTFS_angldf['pos_x2'] = GTFS_angldf['stop_lon'] + posXY*np.sin(GTFS_angldf['pos_angl'])
     GTFS_angldf['pos_y2'] = GTFS_angldf['stop_lat'] + posXY*np.cos(GTFS_angldf['pos_angl'])
     
+    i_row = 0
+    while i_row < len(GTFS_angldf):
+        if GTFS_angldf.loc[i_row,'distance'] < 0.00001:
+            GTFS_angldf.loc[i_row,'pos_x2'] = GTFS_angldf.loc[i_row,'feature_x']
+            GTFS_angldf.loc[i_row,'pos_y2'] = GTFS_angldf.loc[i_row,'feature_y']
+        i_row += 1
+
     GTFS_angldf = GTFS_angldf.drop(['distance','feature_x','feature_y','nearest_x','nearest_y','nrstrd_full_id','nrstrd_osm_id','nrstrd_osm_type','nrstrd_name','nrstrd_highway','n'], axis=1)
 
     
 
     GTFS_angldf.to_csv(GTFS_nmRCT_pos_CSV2, index=False)
     GTFS_angl_pos_path = r"file:///{}?crs={}&delimiter={}&xField={}&yField={}".format(GTFS_nmRCT_pos_CSV2,"epsg:4326", ",", "pos_x2", "pos_y2")
-    GTFS_angl_pos = QgsVectorLayer(GTFS_angl_pos_path,'angl_pos_'+str(trnsprt),"delimitedtext")
+    GTFS_angl_pos = QgsVectorLayer(GTFS_angl_pos_path,'angl_pos_'+str(line_name),"delimitedtext")
     
     params = {'INPUT':GTFS_angl_pos,
             'INPUT_2':splt_roads,
@@ -815,7 +939,7 @@ def stp_posGTFSnm_rect(GTFSnm_rectCSV,trnsprt,splt_roads,temp_posRCT_folder,trns
             'OUTPUT':GTFS_pos}
     processing.run("native:joinbynearest", params)
     
-    GTFS_pos_layer = QgsVectorLayer(GTFS_pos,'GTFSnmRCT_'+str(trnsprt),'ogr')
+    GTFS_pos_layer = QgsVectorLayer(GTFS_pos,'GTFSnmRCT_'+str(line_name),'ogr')
     QgsVectorFileWriter.writeAsVectorFormat(GTFS_pos_layer,GTFS_nmRCT_pos_CSV3 ,"utf-8",driverName = "CSV")
 
     GTFS_posdf = pd.read_csv(GTFS_nmRCT_pos_CSV3)
