@@ -391,19 +391,18 @@ class OSMimport:
                 QgsVectorFileWriter.writeAsVectorFormat(Roads_layer, OSM_roads_gpkg, "UTF-8", Roads_layer.crs(), "GPKG")
                 QgsVectorFileWriter.writeAsVectorFormat(Roads_layer,OSM_roads_csv,"utf-8",driverName = "CSV")
 
+                downloading_tramway(extent, extent_quickosm,OSM_tramways_gpkg)
+
+                # Saving rails (only the lines of OSM file)
+                Rails_layer_file = str(OSM_tramways_gpkg)+'|layername='+str(OSM_tramways_name)+'_lines'
+                Rials_layer =  QgsVectorLayer(Rails_layer_file,OSM_tramways_name,"ogr")
+                QgsVectorFileWriter.writeAsVectorFormat(Rials_layer, OSM_rails_gpkg, "UTF-8", Rials_layer.crs(), "GPKG")
+    
                 highway_average_speed(OSM_roads_csv,highway_speed_csv)
             
                 busroutes(bus_lanes_name, OSM_bus_lanes_gpkg,OSM_roads_gpkg,highway_speed_csv)
 
                 full_city_roads(OSM_roads_gpkg,OSM_bus_lanes_gpkg, full_roads_gpgk,city_roads_name,highway_speed_csv)
-
-            downloading_tramway(extent, extent_quickosm,OSM_tramways_gpkg)
-
-            # Saving rails (only the lines of OSM file)
-            Rails_layer_file = str(OSM_tramways_gpkg)+'|layername='+str(OSM_tramways_name)+'_lines'
-            Rials_layer =  QgsVectorLayer(Rails_layer_file,OSM_tramways_name,"ogr")
-            QgsVectorFileWriter.writeAsVectorFormat(Rials_layer, OSM_rails_gpkg, "UTF-8", Rials_layer.crs(), "GPKG")
-    
 
             if_not_make(temp_folder_Ttbls)
             if_not_make(temp_folder_GTFSstops)
