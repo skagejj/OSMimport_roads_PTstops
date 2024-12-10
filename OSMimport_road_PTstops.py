@@ -41,7 +41,7 @@ import os.path
 import pandas as pd
 from qgis import processing
 from .core_functions import (downloading_ways,
-                            downloading_tramway,
+                            downloading_railway,
                             busroutes, 
                             full_city_roads, 
                             Selected_Ttbls, 
@@ -216,6 +216,10 @@ class OSMimport:
                 routes.loc[i_row,'trnsprt'] = 'Tram'
             elif routes.loc[i_row,'route_desc'] == 'B':
                 routes.loc[i_row,'trnsprt'] = 'Bus'
+            elif routes.loc[i_row,'route_desc'] == 'R':
+                routes.loc[i_row,'trnsprt'] = 'RegRailServ'
+            elif routes.loc[i_row,'route_desc'] == 'FUN':
+                routes.loc[i_row,'trnsprt'] = 'Funicular'
             else:
                 routes.loc[i_row,'trnsprt'] = 'trnsprt'
             i_row += 1
@@ -286,6 +290,13 @@ class OSMimport:
             OSM_tramways_name = 'OSM_tramways'
             OSM_tramways_gpkg = str(road_temp_folder)+'/'+str(OSM_tramways_name)+'.gpkg'
 
+            OSM_Regtrainways_name = 'OSM_Regtrainways'
+            OSM_Regtrainways_gpkg = str(road_temp_folder)+'/'+str(OSM_Regtrainways_name)+'.gpkg'
+
+            OSM_funicularways_name = 'OSM_funicularways'
+            OSM_funicularways_gpkg = str(road_temp_folder)+'/'+str(OSM_funicularways_name)+'.gpkg'
+
+
             extent = str(south)+','+str(west)+','+str(north)+','+str(east)
             extent_quickosm = str(south)+','+str(west)+','+str(north)+','+str(east)+' [EPSG:4326]'
             
@@ -298,6 +309,12 @@ class OSMimport:
 
             OSM_tram_name = 'OSM_tram'
             OSM_rails_gpkg = str(road_temp_folder)+'/'+str(OSM_tram_name)+'.gpkg'
+
+            OSM_Regtrain_name = 'OSM_Regtrain'
+            OSM_Regtrain_gpkg = str(road_temp_folder)+'/'+str(OSM_Regtrain_name)+'.gpkg'
+
+            OSM_funicular_name = 'OSM_funicular'
+            OSM_funicular_gpkg = str(road_temp_folder)+'/'+str(OSM_funicular_name)+'.gpkg'
             
             OSM_roads_nameCSV = 'OSM_roads_CSV'
             OSM_roads_csv = str(road_temp_folder)+'/'+str(OSM_roads_name)+'.csv'
@@ -314,6 +331,10 @@ class OSMimport:
             city_roads_name = 'city roads'
 
             city_rails_name = 'city rails'
+
+            city_Regtrain_name = 'city Regtrain'
+
+            city_funicular_name = 'city funicular'
 
             Ttlbs_txt = str(dwnldfld)+'/stop_times.txt'
 
@@ -391,13 +412,26 @@ class OSMimport:
                 QgsVectorFileWriter.writeAsVectorFormat(Roads_layer, OSM_roads_gpkg, "UTF-8", Roads_layer.crs(), "GPKG")
                 QgsVectorFileWriter.writeAsVectorFormat(Roads_layer,OSM_roads_csv,"utf-8",driverName = "CSV")
 
-                downloading_tramway(extent, extent_quickosm,OSM_tramways_gpkg)
-
+                downloading_railway(extent, extent_quickosm,OSM_tramways_gpkg, 'tram')
+  
                 # Saving rails (only the lines of OSM file)
                 Rails_layer_file = str(OSM_tramways_gpkg)+'|layername='+str(OSM_tramways_name)+'_lines'
                 Rials_layer =  QgsVectorLayer(Rails_layer_file,OSM_tramways_name,"ogr")
                 QgsVectorFileWriter.writeAsVectorFormat(Rials_layer, OSM_rails_gpkg, "UTF-8", Rials_layer.crs(), "GPKG")
-    
+
+                downloading_railway(extent, extent_quickosm,OSM_Regtrainways_gpkg, 'narrow_gauge')
+                # Saving Regtrain (only the lines of OSM file)
+                Regtrain_layer_file = str(OSM_Regtrainways_gpkg)+'|layername='+str(OSM_Regtrainways_name)+'_lines'
+                Regtrain_layer =  QgsVectorLayer(Regtrain_layer_file,OSM_Regtrainways_name,"ogr")
+                QgsVectorFileWriter.writeAsVectorFormat(Regtrain_layer, OSM_Regtrain_gpkg, "UTF-8", Regtrain_layer.crs(), "GPKG")
+
+
+                downloading_railway(extent, extent_quickosm,OSM_funicularways_gpkg, 'funicular')
+                funicular_layer_file = str(OSM_funicularways_gpkg)+'|layername='+str(OSM_funicularways_name)+'_lines'
+                funicular_layer =  QgsVectorLayer(funicular_layer_file,OSM_funicularways_name,"ogr")
+                QgsVectorFileWriter.writeAsVectorFormat(funicular_layer, OSM_funicular_gpkg, "UTF-8", funicular_layer.crs(), "GPKG")    
+                
+              
                 highway_average_speed(OSM_roads_csv,highway_speed_csv)
             
                 busroutes(bus_lanes_name, OSM_bus_lanes_gpkg,OSM_roads_gpkg,highway_speed_csv)
@@ -526,6 +560,10 @@ class OSMimport:
 
             city_rails_layer = QgsVectorLayer(OSM_rails_gpkg,city_rails_name,"ogr")
 
+            city_regtrain_layer = QgsVectorLayer(OSM_Regtrain_gpkg,city_Regtrain_name,"ogr")
+            
+            city_funicular_layer = QgsVectorLayer(OSM_funicular_gpkg,city_funicular_name,"ogr")
+
             print ('... adding the angles to the GTFSstops')
 
             # create GTFSstops gpkg with angle of the nearest road 
@@ -537,6 +575,10 @@ class OSMimport:
                 GTFSstops_path = lines_df.loc[i_row,'GTFSstops&segments']
                 if lines_df.loc[i_row,'trnsprt_type'] == 'Tram':
                     GTFSstops_angle, GTFSnm_RD, GTFSnm_angCSV, spl_file = angles_tram(city_rails_layer,line,GTFSstops_path,temproadfldr,temp_GTFSnm_folder)
+                if lines_df.loc[i_row,'trnsprt_type'] == 'RegRailServ':
+                    GTFSstops_angle, GTFSnm_RD, GTFSnm_angCSV, spl_file = angles_tram(city_regtrain_layer,line,GTFSstops_path,temproadfldr,temp_GTFSnm_folder)
+                if lines_df.loc[i_row,'trnsprt_type'] == 'Funicular':
+                    GTFSstops_angle, GTFSnm_RD, GTFSnm_angCSV, spl_file = angles_tram(city_funicular_layer,line,GTFSstops_path,temproadfldr,temp_GTFSnm_folder)
                 else:
                     GTFSstops_angle, GTFSnm_RD, GTFSnm_angCSV, spl_file = angles_buses(city_roads_layer,line,GTFSstops_path,temproadfldr,temp_GTFSnm_folder)
                 lines_df.loc[i_row,'GTFSnm_RD'] = GTFSnm_RD

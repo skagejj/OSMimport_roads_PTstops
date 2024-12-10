@@ -35,9 +35,9 @@ def downloading_ways(extent,extent_quickosm,OSM_ways_gpkg):
     processing.run("quickosm:downloadosmdatarawquery", params)
             
 
-def downloading_tramway(extent, extent_quickosm,OSM_tramways_gpkg):
+def downloading_railway(extent, extent_quickosm,OSM_tramways_gpkg,trnsprt):
 
-    params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    way["railway"="tram"]('+str(extent)+');\n    \n  \t\n);\n(._;>;);\nout body;',
+    params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    way["railway"="'+str(trnsprt)+'"]('+str(extent)+');\n    \n  \t\n);\n(._;>;);\nout body;',
             'TIMEOUT':180,
             'SERVER':'https://overpass-api.de/api/interpreter',
             'EXTENT':extent_quickosm,
@@ -178,7 +178,12 @@ def full_city_roads(OSM_roads_gpkg,bus_lanes_gpkg, full_roads_gpgk, city_roads_n
     processing.run("native:mergevectorlayers",params)
 
 def Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld,trips_txt):
+    Ttbls_orig = pd.read_csv(Ttlbs_txt)
+
+    Ttbls_orig.to_csv(Ttlbs_txt,index_label='orig_id')
+
     Ttbls = pd.read_csv(Ttlbs_txt)
+
     Ttbls['prnt_stp_id']= ""
 
     i_row = 0
@@ -274,42 +279,49 @@ def preapare_GTFSstops_by_transport(stops_txt, Ttbl_file,trnsprt,tempfolder,shrt
     i_max = len(Ttbl)-1
     while i_row < i_max:
         if Ttbl.loc[i_row,'stop_sequence'] < Ttbl.loc[i_row2,'stop_sequence']:
-            seq_ls.append(Ttbl.loc[i_row,'prnt_stp_id'])
+            seq_ls.append(str(Ttbl.loc[i_row,'prnt_stp_id']))
             seq_end += 1
         else:
-            seq_ls.append(Ttbl.loc[i_row,'prnt_stp_id'])
-            seq_str = str(seq_ls[0])
-            # add the sequence to the Ttbl
-            i_ls = 1
-            while i_ls < len(seq_ls):
-                seq_str = str(seq_str) +' '+str(seq_ls[i_ls])
-                i_ls +=1
+            seq_ls.append(str(Ttbl.loc[i_row,'prnt_stp_id']))
+            
+            seq_str = " ".join(seq_ls)
+            
+            # seq_str = str(seq_ls[0])
+            # # add the sequence to the Ttbl
+            # i_ls = 1
+            # while i_ls < len(seq_ls):
+            #     seq_str = str(seq_str) +' '+str(seq_ls[i_ls])
+            #     i_ls +=1
             sequences.loc[i_seq,0] = i_seq
             sequences.loc[i_seq,'sequence'] = seq_str
             i_seq += 1
             while seq_init <= seq_end:
                 Ttbl.loc[seq_init,'sequence'] = seq_str
                 seq_init += 1
-            del seq_ls, i_ls, seq_str
+            del seq_ls, seq_str #, i_ls
             seq_ls = []
             seq_end += 1
         i_row +=1
         i_row2 +=1
 
     # add the sequence to the record of the last sequence >bug resolved<
-    seq_ls.append(Ttbl.loc[i_row,'prnt_stp_id'])
-    seq_str = str(seq_ls[0])
-    i_ls = 1
-    while i_ls < len(seq_ls):
-        seq_str = str(seq_str) +' '+str(seq_ls[i_ls])
-        i_ls +=1
+    seq_ls.append(str(Ttbl.loc[i_row,'prnt_stp_id']))
+    
+    seq_str = " ".join(seq_ls)
+    
+    # seq_str = str(seq_ls[0])
+    # i_ls = 1
+    # while i_ls < len(seq_ls):
+    #     seq_str = str(seq_str) +' '+str(seq_ls[i_ls])
+    #     i_ls +=1
+
     sequences.loc[i_seq,0] = i_seq
     sequences.loc[i_seq,'sequence'] = seq_str
     del i_seq
     while seq_init <= seq_end:
         Ttbl.loc[seq_init,'sequence'] = seq_str
         seq_init += 1
-    del seq_ls, i_ls, seq_str
+    del seq_ls, seq_str # i_ls
 
     # create listo of unique sequences
     del i_row, i_row2, i_max
@@ -347,9 +359,16 @@ def preapare_GTFSstops_by_transport(stops_txt, Ttbl_file,trnsprt,tempfolder,shrt
     i_row = 0
     while i_row < len(mother_sequences):
         i_row2 = 0
+        pos_prec = -1
         while i_row2 < len(Ttbl):
             if Ttbl.loc[i_row2,'sequence'] in mother_sequences[i_row]:
-                Ttbl.loc[i_row2,'seq_stpID'] = str(trnsprt)+'_main'+str(i_row+1)+'_pos'+str(mother_sequences[i_row].split().index(str(Ttbl.loc[i_row2,'prnt_stp_id'])))
+                pos = mother_sequences[i_row].split(" ").index(str(Ttbl.loc[i_row2,'prnt_stp_id']))
+                dif = pos_prec - pos
+                less_than = len(mother_sequences[i_row].split(" ")) -1
+                if pos <= pos_prec and dif < less_than:
+                    pos = pos_prec +1 
+                Ttbl.loc[i_row2,'seq_stpID'] = str(trnsprt)+'_trip'+str(i_row+1)+'_pos'+str(pos)
+                pos_prec = pos
             i_row2 += 1
         i_row += 1
 
@@ -398,7 +417,7 @@ def preapare_GTFSstops_by_transport(stops_txt, Ttbl_file,trnsprt,tempfolder,shrt
     while i_row < i_max:
         if most_freq_stps.loc[i_row,'pos'] < most_freq_stps.loc[i_row2,'pos']:
             most_freq_stps.loc[i_row, 'mini_trip'] = str(most_freq_stps.loc[i_row, 'stop_id'])+' '+str((most_freq_stps.loc[i_row2, 'stop_id']))
-            most_freq_stps.loc[i_row, 'mini_tr_pos'] = str(trnsprt)+'_main'+str(most_freq_stps.loc[i_row, 'trip'])+'_pos'+str((most_freq_stps.loc[i_row, 'pos']))+'-pos'+str((most_freq_stps.loc[i_row2, 'pos']))
+            most_freq_stps.loc[i_row, 'mini_tr_pos'] = str(trnsprt)+'_trip'+str(most_freq_stps.loc[i_row, 'trip'])+'_pos'+str((most_freq_stps.loc[i_row, 'pos']))+'-pos'+str((most_freq_stps.loc[i_row2, 'pos']))
         i_row += 1
         i_row2 += 1
 
@@ -652,7 +671,7 @@ def rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, buses_long,tram_long, lin
 
     rect_type = 'sidewalk'
     
-    if trnsprt_type == 'Tram':
+    if trnsprt_type == 'Tram' or trnsprt_type == 'RegRailServ' or trnsprt_type == 'Funicular' :
         trnsprt_long = tram_long
     else:
         trnsprt_long = buses_long
@@ -715,7 +734,7 @@ def rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, buses_long,tram_long, lin
 
 def rectangles_OSMonROADline(GTFSstops_path_OSMonROADline,buses_long, tram_long, road_average_width,line, GTFSstps_rect_OSMonROADline_gpkg, trnsprt_type):
     
-    if trnsprt_type == 'Tram':
+    if trnsprt_type == 'Tram'  or trnsprt_type == 'RegRailServ' or trnsprt_type == 'Funicular' :
         trnsprt_long = tram_long
     else:
         trnsprt_long = buses_long
@@ -771,6 +790,12 @@ def OSM_PTstps_dwnld(extent, extent_quickosm,OSM_PTstp_rel_gpkg,OSM_PTstp_gpkg,s
     if trnsprt_type == 'Tram':
         route = 'tram'
         route_cond = '"railway" is \'tram_stop\''
+    elif trnsprt_type == 'RegRailServ':
+        route = 'train'
+        route_cond = '"railway" is \'stop\''
+    elif trnsprt_type == 'Funicular':
+        route = 'funicular'
+        route_cond = '"station" is \'funicular\''
     else:
         route = 'bus'
         route_cond = '"highway" is \'bus_stop\''
@@ -856,7 +881,7 @@ def OSMintersecGTFS(rectangles,OSMgpkg,tempOSMfolder,shrt_name):
 
 def stp_posGTFSnm_rect(GTFSnm_rectCSV,line_name,splt_roads,temp_posRCT_folder,buses_long,tram_long, trnsprt_type):
 
-    if trnsprt_type == 'Tram':
+    if trnsprt_type == 'Tram' or trnsprt_type == 'RegRailServ' or trnsprt_type == 'Funicular' :
         trnsprt_long = tram_long
     else:
         trnsprt_long = buses_long
