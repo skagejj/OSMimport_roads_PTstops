@@ -358,17 +358,32 @@ def preapare_GTFSstops_by_transport(stops_txt, Ttbl_file,trnsprt,tempfolder,shrt
     # to define the position of the stop in the beloging sequence
     i_row = 0
     while i_row < len(mother_sequences):
+        moth_seq = mother_sequences[i_row].split(" ")
+        ls_repet = []
+        for elem in moth_seq:
+            if moth_seq.count(elem) > 1:
+                ls_repet.append(elem)
         i_row2 = 0
-        pos_prec = -1
         while i_row2 < len(Ttbl):
             if Ttbl.loc[i_row2,'sequence'] in mother_sequences[i_row]:
                 pos = mother_sequences[i_row].split(" ").index(str(Ttbl.loc[i_row2,'prnt_stp_id']))
-                dif = pos_prec - pos
-                less_than = len(mother_sequences[i_row].split(" ")) -1
-                if pos <= pos_prec and dif < less_than:
-                    pos = pos_prec +1 
+                row_init = i_row2
+                row_after = i_row2+1
+                if ls_repet and str(Ttbl.loc[i_row2,'prnt_stp_id']) in ls_repet:
+                    sequ_ls = [str(Ttbl.loc[row_init,'prnt_stp_id'])]
+                    while row_after < len(Ttbl) and Ttbl.loc[row_init,'stop_sequence'] < Ttbl.loc[row_after,'stop_sequence'] :
+                        sequ_ls.append(str(Ttbl.loc[row_after,'prnt_stp_id']))
+                        row_init +=1
+                        row_after +=1 
+                    sequ_str = " ".join(sequ_ls)
+                    idx_ls = 0
+                    while idx_ls < len(moth_seq):
+                        if not sequ_str in " ".join(moth_seq[idx_ls:len(moth_seq)]):
+                            pos = idx_ls - 1
+                            break
+                        idx_ls +=1
+                        pos = idx_ls-1
                 Ttbl.loc[i_row2,'seq_stpID'] = str(trnsprt)+'_trip'+str(i_row+1)+'_pos'+str(pos)
-                pos_prec = pos
             i_row2 += 1
         i_row += 1
 
