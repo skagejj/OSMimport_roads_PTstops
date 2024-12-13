@@ -549,14 +549,14 @@ def angles_tram(city_rails_layer,trnsprt,trnsprt_GTFSstops_file,temp_road_folder
     #clippint roads to make it smaller
     params = {'INPUT':city_rails_layer,
               'OVERLAY':str(temp_road_folder)+'/bf_'+str(trnsprt)+'_GTFSstops.gpkg',
-              'OUTPUT':str(temp_road_folder)+'/cl_'+str(trnsprt)+'_swissroad.gpkg'}        
+              'OUTPUT':str(temp_road_folder)+'/cl_'+str(trnsprt)+'_rail.gpkg'}        
     processing.run("native:clip", params)
     del params
     
-    spl_file = str(temp_road_folder)+'/Spl_'+str(trnsprt)+'_swissroad.gpkg'
+    spl_file = str(temp_road_folder)+'/Spl_'+str(trnsprt)+'_rail.gpkg'
         
     #splitting in to more simple lines 
-    params = {'INPUT':str(temp_road_folder)+'/cl_'+str(trnsprt)+'_swissroad.gpkg',
+    params = {'INPUT':str(temp_road_folder)+'/cl_'+str(trnsprt)+'_rail.gpkg',
               'OUTPUT':spl_file}
     processing.run("native:multiparttosingleparts", params)
     del params
@@ -568,7 +568,7 @@ def angles_tram(city_rails_layer,trnsprt,trnsprt_GTFSstops_file,temp_road_folder
     #processing.run("native:splitlinesbylength", params)
 
     #expression to calculate angle_at_vertex($geometry,0)    
-    splt_roads = QgsVectorLayer(spl_file,"Spl_"+str(trnsprt)+"_roads","ogr")
+    splt_roads = QgsVectorLayer(spl_file,"Spl_"+str(trnsprt)+"_rail","ogr")
     pr = splt_roads.dataProvider()
     pr.addAttributes([QgsField('stp_angl',QVariant.Double)])
     splt_roads.updateFields
@@ -675,9 +675,15 @@ def angles_buses(roadlayer,trnsprt,trnsprt_GTFSstops_file,temp_road_folder,GTFSn
     del params, context, expression
     return anglefile, GTFSnomatchangl, GTFS_NMangcsv, spl_file
 
-def angle_onRD_sidewalk(GTFSstops_angle, GTFSstops_angle_sidewalk_gpkg,GTFSstops_angle_OSMonROADline_gpkg):
+def angle_onRD_sidewalk(GTFSstops_angle, GTFSstops_angle_sidewalk_gpkg,GTFSstops_angle_OSMonROADline_gpkg, agency_txt):
+    agency = pd.read_csv(agency_txt)
+    ls_agency = agency.agency_id.unique()
+    if 881 in ls_agency:
+        dist = 0.00001
+    else:
+        dist = 0.001
     params = {'INPUT': GTFSstops_angle,
-                'EXPRESSION':'"distance" > 0.00001',
+                'EXPRESSION':'"distance" > '+str(dist),
                 'OUTPUT': GTFSstops_angle_sidewalk_gpkg,
                 'FAIL_OUTPUT': GTFSstops_angle_OSMonROADline_gpkg}
     processing.run("native:extractbyexpression", params)
@@ -894,7 +900,7 @@ def OSMintersecGTFS(rectangles,OSMgpkg,tempOSMfolder,shrt_name):
     del params
     return OSMjnGTFS, OSMnomatch,OSMjoinGTFScsv, OSMnomatchGTFScsv
 
-def stp_posGTFSnm_rect(GTFSnm_rectCSV,line_name,splt_roads,temp_posRCT_folder,buses_long,tram_long, trnsprt_type):
+def stp_posGTFSnm_rect(GTFSnm_rectCSV,line_name,splt_roads,temp_posRCT_folder,buses_long,tram_long, trnsprt_type, agency_txt):
 
     if trnsprt_type == 'Tram' or trnsprt_type == 'RegRailServ' or trnsprt_type == 'Funicular' :
         trnsprt_long = tram_long
@@ -954,14 +960,19 @@ def stp_posGTFSnm_rect(GTFSnm_rectCSV,line_name,splt_roads,temp_posRCT_folder,bu
     GTFS_angldf['pos_x2'] = GTFS_angldf['stop_lon'] + posXY*np.sin(GTFS_angldf['pos_angl'])
     GTFS_angldf['pos_y2'] = GTFS_angldf['stop_lat'] + posXY*np.cos(GTFS_angldf['pos_angl'])
     
+    agency = pd.read_csv(agency_txt)
+    ls_agency = agency.agency_id.unique()
     i_row = 0
     while i_row < len(GTFS_angldf):
-        if GTFS_angldf.loc[i_row,'distance'] < 0.00001:
+        if GTFS_angldf.loc[i_row,'distance'] < 0.00001 or not 881 in ls_agency:
             GTFS_angldf.loc[i_row,'pos_x2'] = GTFS_angldf.loc[i_row,'feature_x']
             GTFS_angldf.loc[i_row,'pos_y2'] = GTFS_angldf.loc[i_row,'feature_y']
         i_row += 1
-
-    GTFS_angldf = GTFS_angldf.drop(['distance','feature_x','feature_y','nearest_x','nearest_y','nrstrd_full_id','nrstrd_osm_id','nrstrd_osm_type','nrstrd_name','nrstrd_highway','n'], axis=1)
+    
+    ls_to_delete = ['distance','feature_x','feature_y','nearest_x','nearest_y','nrstrd_full_id','nrstrd_osm_id','nrstrd_osm_type','nrstrd_name','nrstrd_highway','n']
+    exist_cols = GTFS_angldf.columns
+    ls_to_drop = [col for col in ls_to_delete if col in exist_cols]
+    GTFS_angldf = GTFS_angldf.drop(ls_to_drop, axis=1)
 
     
 
@@ -983,7 +994,11 @@ def stp_posGTFSnm_rect(GTFSnm_rectCSV,line_name,splt_roads,temp_posRCT_folder,bu
     QgsVectorFileWriter.writeAsVectorFormat(GTFS_pos_layer,GTFS_nmRCT_pos_CSV3 ,"utf-8",driverName = "CSV")
 
     GTFS_posdf = pd.read_csv(GTFS_nmRCT_pos_CSV3)
-    GTFS_posdf = GTFS_posdf.drop(['distance','feature_x','feature_y','pos_x2','pos_y2'], axis=1)
+
+    ls_to_delete = ['distance','feature_x','feature_y','pos_x2','pos_y2']
+    exist_cols = GTFS_posdf.columns
+    ls_to_drop = [col for col in ls_to_delete if col in exist_cols]
+    GTFS_posdf = GTFS_posdf.drop(ls_to_drop, axis=1)
     GTFS_posdf = GTFS_posdf.rename(columns={'nearest_x':'lon','nearest_y':'lat'})
     
     
@@ -997,26 +1012,32 @@ def stp_posGTFSnm_rect(GTFSnm_rectCSV,line_name,splt_roads,temp_posRCT_folder,bu
     return GTFS_nmRCT_NEWpos_CSV
 
 def joinNEWandValidOSM(newOSMpos,GTFSnomatch_RD,OSMintersectGTFS,GTFSstps_seg,temp_OSM_for_routing,line,stops_txt):
-    newOSM = pd.read_csv(newOSMpos,dtype = {'stop_id': str})
+    
     GTFSnm = pd.read_csv(GTFSnomatch_RD,dtype = {'stop_id': str})
     validOSM = pd.read_csv(OSMintersectGTFS)
     GTFSss = pd.read_csv(GTFSstps_seg)
+    OSMstops_unsorted = pd.DataFrame()
 
-    newOSM = newOSM[['stop_id','line_name','trip','pos','lon','lat']]
-    newOSM['loc_base'] = 'generated from GTFS on OSM roads'
-    newOSM = newOSM.rename(columns={'stop_id':'GTFS_stop_id'})
+    if os.path.exists(newOSMpos):
+        newOSM = pd.read_csv(newOSMpos,dtype = {'stop_id': str})
+        newOSM = newOSM[['stop_id','line_name','trip','pos','lon','lat']]
+        newOSM['loc_base'] = 'generated from GTFS on OSM roads'
+        newOSM = newOSM.rename(columns={'stop_id':'GTFS_stop_id'})
+        OSMstops_unsorted = pd.concat([OSMstops_unsorted , newOSM], ignore_index=True)
 
-    GTFSnm = GTFSnm[['stop_id','line_name','trip','pos','stop_lon','stop_lat']]
-    GTFSnm['loc_base'] = 'GTFS points'
-    GTFSnm = GTFSnm.rename(columns={'stop_id':'GTFS_stop_id','stop_lat':'lat','stop_lon':'lon'})
+    if not GTFSnm.empty:
+        GTFSnm = GTFSnm[['stop_id','line_name','trip','pos','stop_lon','stop_lat']]
+        GTFSnm['loc_base'] = 'GTFS points'
+        GTFSnm = GTFSnm.rename(columns={'stop_id':'GTFS_stop_id','stop_lat':'lat','stop_lon':'lon'})
+        OSMstops_unsorted = pd.concat([OSMstops_unsorted , GTFSnm], ignore_index=True)
+
+    if not validOSM.empty:
+        validOSM = validOSM[['GTFS_stop_id','GTFS_line_name','GTFS_trip','GTFS_pos','lon','lat']]
+        validOSM['loc_base'] = 'already present on OSM'
+        validOSM = validOSM.rename(columns={'GTFS_trip':'trip','GTFS_pos':'pos','GTFS_line_name':'line_name'})
+        OSMstops_unsorted = pd.concat([OSMstops_unsorted , validOSM], ignore_index=True)
+
     
-
-    validOSM = validOSM[['GTFS_stop_id','GTFS_line_name','GTFS_trip','GTFS_pos','lon','lat']]
-    validOSM['loc_base'] = 'already present on OSM'
-    validOSM = validOSM.rename(columns={'GTFS_trip':'trip','GTFS_pos':'pos','GTFS_line_name':'line_name'})
-    
-
-    OSMstops_unsorted = pd.concat([validOSM,newOSM,GTFSnm], ignore_index=True)
     OSMstops_updated = OSMstops_unsorted.sort_values(['trip','pos']).reset_index(drop=True)
 
     if len(GTFSss) == len(OSMstops_updated):
@@ -1036,6 +1057,8 @@ def joinNEWandValidOSM(newOSMpos,GTFSnomatch_RD,OSMintersectGTFS,GTFSstps_seg,te
     stops = stops[['stop_id','stop_lon','stop_lat']]
     OSMstops_updated = OSMstops_updated.merge(stops,how='left', left_on='GTFS_stop_id', right_on='stop_id')
 
+    # in case there is more than one OSM stop for an GTFS,
+    # the farest is deleted 
     todelete = []
     i_row = 0
     i_row2 = 1

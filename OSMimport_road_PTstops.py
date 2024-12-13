@@ -29,7 +29,10 @@ from qgis.core import  (QgsCoordinateReferenceSystem,
                         QgsVectorFileWriter, 
                         QgsRasterLayer, 
                         QgsProject,
+                        QgsFields,
+                        QgsField,
  )
+from PyQt5.QtCore import QVariant
 
 # Initialize Qt resources from file resources.py
 from .resources import *
@@ -276,6 +279,11 @@ class OSMimport:
 
             stops_txt = str(dwnldfld)+'/stops.txt'
             stops = pd.read_csv(stops_txt)
+
+            agency_txt = str(dwnldfld)+'/agency.txt'
+            agency = pd.read_csv(agency_txt)
+            ls_agency = agency.agency_id.unique()
+    
 
             lines_df_csv = str(dwnldfld)+'/lines_files_list.csv'
 
@@ -567,7 +575,7 @@ class OSMimport:
             print ('... adding the angles to the GTFSstops')
 
             # create GTFSstops gpkg with angle of the nearest road 
-
+            
             i_row = lines_df_row_init
             while i_row < len(lines_df):
                 
@@ -575,9 +583,9 @@ class OSMimport:
                 GTFSstops_path = lines_df.loc[i_row,'GTFSstops&segments']
                 if lines_df.loc[i_row,'trnsprt_type'] == 'Tram':
                     GTFSstops_angle, GTFSnm_RD, GTFSnm_angCSV, spl_file = angles_tram(city_rails_layer,line,GTFSstops_path,temproadfldr,temp_GTFSnm_folder)
-                if lines_df.loc[i_row,'trnsprt_type'] == 'RegRailServ':
+                elif lines_df.loc[i_row,'trnsprt_type'] == 'RegRailServ':
                     GTFSstops_angle, GTFSnm_RD, GTFSnm_angCSV, spl_file = angles_tram(city_regtrain_layer,line,GTFSstops_path,temproadfldr,temp_GTFSnm_folder)
-                if lines_df.loc[i_row,'trnsprt_type'] == 'Funicular':
+                elif lines_df.loc[i_row,'trnsprt_type'] == 'Funicular':
                     GTFSstops_angle, GTFSnm_RD, GTFSnm_angCSV, spl_file = angles_tram(city_funicular_layer,line,GTFSstops_path,temproadfldr,temp_GTFSnm_folder)
                 else:
                     GTFSstops_angle, GTFSnm_RD, GTFSnm_angCSV, spl_file = angles_buses(city_roads_layer,line,GTFSstops_path,temproadfldr,temp_GTFSnm_folder)
@@ -601,7 +609,7 @@ class OSMimport:
                 GTFSstops_angle_OSMonROADline_gpkg = str(temproadfldr)+'/GTFS'+str(line)+'_OSMonROADline.gpkg'
                 lines_df.loc[i_row,'GTFSstps_angle_sidewalk'] = GTFSstops_angle_sidewalk_gpkg
                 lines_df.loc[i_row,'GTFSstps_angle_OSMonROADline'] = GTFSstops_angle_OSMonROADline_gpkg
-                angle_onRD_sidewalk(GTFSstops_angle, GTFSstops_angle_sidewalk_gpkg,GTFSstops_angle_OSMonROADline_gpkg)
+                angle_onRD_sidewalk(GTFSstops_angle, GTFSstops_angle_sidewalk_gpkg,GTFSstops_angle_OSMonROADline_gpkg, agency_txt)
                 i_row = i_row+1
 
 
@@ -619,20 +627,40 @@ class OSMimport:
                 trnsprt_type = lines_df.loc[i_row,'trnsprt_type']
                 GTFSstps_rect_sidewalk_csv = str(temp_rect_folder)+'/GTFSangl_sidewalk_'+str(line)+'.csv'
                 GTFSstps_rect_sidewalk_gpkg = str(temp_rect_folder)+'/rects_sidewalk_'+str(line)+'.gpkg'
-                rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, buses_long,tram_long,line, GTFSstps_rect_sidewalk_gpkg, GTFSstps_rect_sidewalk_csv,trnsprt_type)
-                lines_df.loc[i_row,'GTFSstps_rect_sidewalk_gpkg'] = GTFSstps_rect_sidewalk_gpkg
-                lines_df.loc[i_row,'GTFSstps_rect_sidewalk_csv'] = GTFSstps_rect_sidewalk_csv
+                GTFSstops_angle_sidewalk_layer = QgsVectorLayer(GTFSstops_angle_sidewalk_gpkg,'GTFS'+str(line)+'_anlge_sidewalk',"ogr")
+                ls_GTFSstps_rect = []
+                if not GTFSstops_angle_sidewalk_layer.featureCount() == 0:
+                    rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, buses_long,tram_long,line, GTFSstps_rect_sidewalk_gpkg, GTFSstps_rect_sidewalk_csv,trnsprt_type)
+                    lines_df.loc[i_row,'GTFSstps_rect_sidewalk_gpkg'] = GTFSstps_rect_sidewalk_gpkg
+                    lines_df.loc[i_row,'GTFSstps_rect_sidewalk_csv'] = GTFSstps_rect_sidewalk_csv
+                    ls_GTFSstps_rect.append(GTFSstps_rect_sidewalk_gpkg)
                 
                 GTFSstops_path_OSMonROADline = lines_df.loc[i_row,'GTFSstps_angle_OSMonROADline']
                 GTFSstps_rect_OSMonROADline_gpkg = str(temp_rect_folder)+'/rects_OSMonROADline_'+str(line)+'.gpkg'
-                rectangles_OSMonROADline(GTFSstops_path_OSMonROADline,buses_long, tram_long,  road_average_width,line,GTFSstps_rect_OSMonROADline_gpkg, trnsprt_type)
+                GTFSstops_angle_OSMonROADline_layer = QgsVectorLayer(GTFSstops_path_OSMonROADline,'GTFS'+str(line)+'_OSMonROADline',"ogr")
+                if not GTFSstops_angle_OSMonROADline_layer.featureCount() == 0:
+                    rectangles_OSMonROADline(GTFSstops_path_OSMonROADline,buses_long, tram_long,  road_average_width,line,GTFSstps_rect_OSMonROADline_gpkg, trnsprt_type)
+                    ls_GTFSstps_rect.append(GTFSstps_rect_OSMonROADline_gpkg)
+
                 GTFSstps_rect_gpkg = str(temp_rect_folder)+'/rects_'+str(line)+'.gpkg'
                 lines_df.loc[i_row,'GTFSstps_rect'] = GTFSstps_rect_gpkg
-                ls_GTFSstps_rect = [GTFSstps_rect_sidewalk_gpkg,GTFSstps_rect_OSMonROADline_gpkg]
-                params = {'LAYERS':ls_GTFSstps_rect,
-                        'CRS':QgsCoordinateReferenceSystem('EPSG:4326'),
-                        'OUTPUT':GTFSstps_rect_gpkg}
-                processing.run("native:mergevectorlayers",params)
+                if ls_GTFSstps_rect and(not 29 in ls_agency or not 344 in ls_agency or not 764 in ls_agency):
+                    params = {'LAYERS':ls_GTFSstps_rect,
+                            'CRS':QgsCoordinateReferenceSystem('EPSG:4326'),
+                            'OUTPUT':GTFSstps_rect_gpkg}
+                    processing.run("native:mergevectorlayers",params)
+                else:
+                    layerType = "Polygon"
+                    crs = "EPSG:4326"
+                    emptyLayer = QgsVectorLayer(f"{layerType}?crs={crs}", "New Empty Layer", "memory")
+                    fields = QgsFields()
+                    fields.append(QgsField("fid", QVariant.Int))
+                    fields.append(QgsField("line_name", QVariant.String))
+                    emptyLayer.startEditing()
+                    emptyLayer.dataProvider().addAttributes(fields.toList())
+                    emptyLayer.updateFields()
+                    emptyLayer.commitChanges()
+                    QgsVectorFileWriter.writeAsVectorFormat(emptyLayer, GTFSstps_rect_gpkg, "UTF-8", emptyLayer.crs(), "GPKG")
 
                 i_row = i_row + 1
 
@@ -677,14 +705,19 @@ class OSMimport:
             # create list of GTFS rectangls that don't match with any OSM
             i_row = lines_df_row_init
             while i_row < len(lines_df):
-                GTFSnmRCT_csv = str(temp_GTFSnm_folder)+'/GTFSnmRCT_'+str(lines_df.loc[i_row,'line_name'])+'.csv'
                 OSMjnGTFS = pd.read_csv(lines_df.loc[i_row,'OSMintersecGTFS'])
-                lsGTFSjoined = OSMjnGTFS.GTFS_stop_id.unique()
                 GTFSstops = pd.read_csv(lines_df.loc[i_row,'GTFSstops&segments'])
-                GTFSnom = GTFSstops[~GTFSstops.stop_id.isin(lsGTFSjoined)]
                 GTFSnm_RD = pd.read_csv(lines_df.loc[i_row,'GTFSnm_angCSV'])
-                lsGTFSnmRD = GTFSnm_RD.stop_id.unique()
-                GTFSnmRCT = GTFSnom[~GTFSnom.stop_id.isin(lsGTFSnmRD)]
+                GTFSnmRCT_csv = str(temp_GTFSnm_folder)+'/GTFSnmRCT_'+str(lines_df.loc[i_row,'line_name'])+'.csv'
+                if not OSMjnGTFS.empty:
+                    lsGTFSjoined = OSMjnGTFS.GTFS_stop_id.unique()
+                    GTFSstops = GTFSstops[~GTFSstops.stop_id.isin(lsGTFSjoined)]
+                
+                if not GTFSnm_RD.empty:
+                    lsGTFSnmRD = GTFSnm_RD.stop_id.unique()
+                    GTFSstops = GTFSstops[~GTFSstops.stop_id.isin(lsGTFSnmRD)]
+                
+                GTFSnmRCT = GTFSstops
                 GTFSnmRCT.to_csv(GTFSnmRCT_csv, index = False)
                 lines_df.loc[i_row,'GTFSnmRCT'] = GTFSnmRCT_csv
                 GTFSnm_rect = pd.concat ([GTFSnm_rect,GTFSnmRCT],ignore_index=True)
@@ -701,7 +734,12 @@ class OSMimport:
                 line_name = lines_df.loc[i_row,'line_name']
                 GTFSnmRCT_csv = lines_df.loc[i_row,'GTFSnmRCT']
                 splt_roads = lines_df.loc[i_row,'Spl_roads']
-                NEWpos_file_nmRCT = stp_posGTFSnm_rect(GTFSnmRCT_csv,line_name,splt_roads,temp_GTFSpos_folder,buses_long,tram_long, trnsprt_type)
+                test = pd.read_csv(GTFSnmRCT_csv)
+                if not test.empty:
+                    NEWpos_file_nmRCT = stp_posGTFSnm_rect(GTFSnmRCT_csv,line_name,splt_roads,temp_GTFSpos_folder,buses_long,tram_long, trnsprt_type, agency_txt)
+                else:
+                    NEWpos_file_nmRCT = str(temp_GTFSpos_folder)+'/GTFSnmRCT_pos_'+str(line_name)+'.csv'
+
                 lines_df.loc[i_row, 'GTFSnmRCT_newOSMpos'] = NEWpos_file_nmRCT
                 posdf = pd.read_csv(NEWpos_file_nmRCT)
                 GTFSnmRCT_posdf = pd.concat([GTFSnmRCT_posdf,posdf],ignore_index=True)
@@ -713,7 +751,7 @@ class OSMimport:
               
             i_row = lines_df_row_init
             while i_row < len(lines_df):
-                newOSMpos = lines_df.loc[i_row, 'GTFSnmRCT_newOSMpos'] 
+                newOSMpos = lines_df.loc[i_row, 'GTFSnmRCT_newOSMpos']
                 GTFSnomatch_RD = lines_df.loc[i_row,'GTFSnm_angCSV']
                 OSMintersectGTFS = lines_df.loc[i_row,'OSMintersecGTFS']
                 GTFSstps_seg = lines_df.loc[i_row,'GTFSstops&segments'] 
