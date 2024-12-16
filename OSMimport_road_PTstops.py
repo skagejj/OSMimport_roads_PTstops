@@ -64,7 +64,8 @@ from .core_functions import (downloading_ways,
                             Ttbls_plus,
                             angle_onRD_sidewalk,
                             shape_assignement,
-                            if_not_make
+                            if_not_make,
+                            if_display
 )
 
 class OSMimport:
@@ -780,6 +781,12 @@ class OSMimport:
             if not QgsProject.instance().mapLayersByName(city_roads_name):
                 city_roads_layer = QgsVectorLayer(OSM_roads_gpkg,city_roads_name,"ogr")
                 QgsProject.instance().addMapLayer(city_roads_layer)
+
+            if_display(OSM_rails_gpkg,city_rails_name)
+
+            if_display(OSM_Regtrain_gpkg,city_Regtrain_name)
+
+            if_display(OSM_funicular_gpkg,city_funicular_name)
 
             # publishing the trips on the canvas
             ls_buses_todisp = [str(bus) for bus in ls_buses_selected]

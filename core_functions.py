@@ -135,7 +135,7 @@ def full_city_roads(OSM_roads_gpkg,bus_lanes_gpkg, full_roads_gpgk, city_roads_n
                       QgsField("maxspeed_routing", QVariant.Int)])
     road_layer.updateFields()
 
-    expression1 = QgsExpression('IF("oneway" is \'yes\',\'forward\',NULL)')
+    expression1 = QgsExpression('IF("oneway" is \'yes\' OR "junction" is \'roundabout\' ,\'forward\',NULL)')
         
     highway_speed = pd.read_csv(highway_speed_csv)
     condition = 'if("maxspeed" is not NULL AND regexp_match("maxspeed",\'[0-9]+\'), "maxspeed", '
@@ -1139,3 +1139,8 @@ def transcript_main_files(main_files_fld,main_files_csv,OSM_ways_name,OSM_ways_g
     main_files.to_csv(main_files_csv,index=False)
     return main_files
 
+def if_display(file_path,layer_name):
+    if os.path.exists(file_path):
+        if not QgsProject.instance().mapLayersByName(layer_name):
+            city_r_layer = QgsVectorLayer(file_path,layer_name,"ogr")
+            QgsProject.instance().addMapLayer(city_r_layer)
