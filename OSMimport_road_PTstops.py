@@ -296,7 +296,6 @@ class OSMimport:
                     print('the '+str(line_name)+'\'s "'+str(file)+'" hasn \'t produced yet')
             try:
                 lines_df = lines_df.drop(line_name)
-                print ('the '+str(line_name)+' has been removed sucessfully')
             except Exception:
                 print('you have never run the plugins with the '+str(line_name))
                 
@@ -308,10 +307,9 @@ class OSMimport:
 
         founds=[]
         for line_name in ls_lines_names:
-            founds = founds.append(find(line_name,dwnldfld))
-        if founds:
-            for found in founds: 
+            for found in find('*'+str(line_name)+'*',dwnldfld): 
                 if_remove(found)
+            print ('the '+str(line_name)+' has been removed sucessfully')
         
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
