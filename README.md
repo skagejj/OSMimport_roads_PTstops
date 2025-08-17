@@ -9,6 +9,9 @@ This QGIS plugin facilitates the seamless import and processing of OpenStreetMap
 - **GTFS Data Processing**: Enhances GTFS stop times and routes with spatial attributes derived from OSM data.
 - **Routing Preparation**: Generates optimized layers for routing analysis, including stop positions and road segments.
 
+## Teasing
+Watch the teasing for these plugin [here](https://drive.google.com/file/d/1oaudC09QLDbCJ0qPIztnBvTf7KJRwrF7/view?usp=sharing).
+
 ## Plugin Series
 This plugin is the second in a series of four plugins designed to work together for comprehensive public transport analysis:
 1. **GTFS Agency Selection** ([GitHub Repository](https://github.com/skagejj/gtfsagency_selection)): Focuses on selecting and filtering GTFS data for specific agencies.
@@ -22,7 +25,7 @@ This plugin is the second in a series of four plugins designed to work together 
 3. **Prepare Routing Layers**: Generate layers optimized for routing analysis, including stop positions and road segments.
 
 ## Video Tutorial
-Watch the video tutorial for this plugin [here](https://drive.google.com/file/d/1yul0ZpfBc6-egv7DYJP-tYZC0cBT8gI0/view?usp=drive_link).
+Watch the video tutorial for this plugin [here](https://drive.google.com/file/d/1-LpZNxSGjI7SOaZ7Hn3MHk-4omOrxm9-/view?usp=sharing).
 
 ## Installation
 1. Clone or download the plugin repository.
