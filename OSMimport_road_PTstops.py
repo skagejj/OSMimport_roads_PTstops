@@ -251,6 +251,7 @@ class OSMimport:
         main_files_fld = os.path.join(dwnldfld,temp_folder_main)
         buses_done_csv = os.path.join(main_files_fld,'buses.csv')
         lines_df_csv = str(dwnldfld)+'/lines_files_list.csv'
+        uq_mn_trips_csv = str(dwnldfld)+'/temp/mini-trips/uq_mini_trips.csv'
 
         lines_df_csv = os.path.join(str(dwnldfld),'lines_files_list.csv')
 
@@ -285,9 +286,19 @@ class OSMimport:
 
         lines_df = pd.read_csv(lines_df_csv,dtype='str',index_col='line_name')
 
+        if os.path.exists(uq_mn_trips_csv):
+            uq_mn_trips = pd.read_csv(uq_mn_trips_csv)
+
         ls_files = lines_df.columns
 
         for line_name in ls_lines_names:
+            if os.path.exists(uq_mn_trips_csv):
+                i_row=0
+                while i_row < len(uq_mn_trips):
+                    if line_name in str(uq_mn_trips.loc[i_row,'mini_tr_path']):
+                        uq_mn_trips = uq_mn_trips.drop(i_row)
+                    i_row+=1
+                uq_mn_trips = uq_mn_trips.reset_index(drop=True)
             for file in ls_files:
                 try :
                     path_to_del = lines_df.loc[line_name,file]
@@ -304,6 +315,10 @@ class OSMimport:
 
         if_remove(buses_done_csv)
         buses_done.to_csv(buses_done_csv)
+
+        if os.path.exists(uq_mn_trips_csv):
+            if_remove(uq_mn_trips_csv)
+            uq_mn_trips.to_csv(uq_mn_trips_csv, index=False)
 
         founds=[]
         for line_name in ls_lines_names:
@@ -569,7 +584,8 @@ class OSMimport:
 
             if not os.path.exists(Ttbls_plus_csv):
                 Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld,trips_txt)
-
+            
+            print('Extracting the data of those transports')
             Selected_Ttbls(ls_buses,Ttbls_selected_txt,Ttbls_plus_csv) 
 
             print('the main Time Tables is ready, I start to create the dataframes for each single transport')
