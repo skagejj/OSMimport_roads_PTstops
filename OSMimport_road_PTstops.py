@@ -65,7 +65,9 @@ from .core_functions import (downloading_ways,
                             angle_onRD_sidewalk,
                             shape_assignement,
                             if_not_make,
-                            if_display
+                            if_display,
+                            if_remove,
+                            find
 )
 
 class OSMimport:
@@ -207,6 +209,9 @@ class OSMimport:
         
         self.OSMimport_dialog.UpdatebusButton.clicked.connect(self.__updateBuses)
 
+        self.OSMimport_dialog.RmvBusesButton.clicked.connect(self.__removeBuses)
+
+
         # will be set False in run()
         self.first_start = True
 
@@ -240,6 +245,72 @@ class OSMimport:
         for trnsprt in ls_transport:
             self.OSMimport_dialog.listbusWidget.addItem(QListWidgetItem(str(trnsprt)))
 
+    def __removeBuses(self):
+        dwnldfld = self.OSMimport_dialog.DownloadQgsFolderWidget.filePath()
+        temp_folder_main = str(os.getenv("USERNAME"))+'_main_files'
+        main_files_fld = os.path.join(dwnldfld,temp_folder_main)
+        buses_done_csv = os.path.join(main_files_fld,'buses.csv')
+        lines_df_csv = str(dwnldfld)+'/lines_files_list.csv'
+
+        lines_df_csv = os.path.join(str(dwnldfld),'lines_files_list.csv')
+
+        buses_done = pd.read_csv(buses_done_csv,index_col='trnsp_shrt_name')
+
+        selected_items = self.OSMimport_dialog.listbusWidget.selectedItems()
+        ls_lines = [item.text() for item in selected_items]
+
+        ls_lines_names=[]
+        for line in ls_lines:
+            if "Funicular" in line:
+                trnsp = 'Funicular'
+                shrt_name = line[10:]
+                line_name = trnsp+shrt_name
+            elif "RegRailServ" in line:
+                trnsp = 'RegRailServ'
+                shrt_name = line[12:]
+                line_name = trnsp+shrt_name
+            elif "Tram" in line:
+                trnsp = 'Tram'
+                shrt_name = line[5:]
+                line_name = trnsp+shrt_name
+            else:
+                trnsp = 'Bus'
+                shrt_name = line[4:]
+                line_name = trnsp+shrt_name
+            ls_lines_names.append(line_name)
+            try:
+                buses_done = buses_done.drop(line)
+            except Exception:
+                print('you have never run the plugins with the '+str(line))
+
+        lines_df = pd.read_csv(lines_df_csv,dtype='str',index_col='line_name')
+
+        ls_files = lines_df.columns
+
+        for line_name in ls_lines_names:
+            for file in ls_files:
+                try :
+                    path_to_del = lines_df.loc[line_name,file]
+                    if_remove(path_to_del)
+                except Exception:
+                    print('the '+str(line_name)+'\'s "'+str(file)+'" hasn \'t produced yet')
+            try:
+                lines_df = lines_df.drop(line_name)
+            except Exception:
+                print('you have never run the plugins with the '+str(line_name))
+                
+        if_remove(lines_df_csv)
+        lines_df.to_csv(lines_df_csv)
+
+        if_remove(buses_done_csv)
+        buses_done.to_csv(buses_done_csv)
+
+        founds=[]
+        for line_name in ls_lines_names:
+            for found in find('*'+str(line_name)+'*',dwnldfld): 
+                if_remove(found)
+            print ('the '+str(line_name)+' has been removed sucessfully')
+        
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
         for action in self.actions:
@@ -598,8 +669,7 @@ class OSMimport:
                 GTFSnm_angledf = pd.concat([GTFSnm_angledf,GTFSnm_angl_toconcat],ignore_index=True) 
                 i_row = i_row+1
 
-            if os.path.exists(GTFSnm_angledf_csv):
-                os.remove(GTFSnm_angledf_csv)
+            if_remove(GTFSnm_angledf_csv)
             GTFSnm_angledf.to_csv(GTFSnm_angledf_csv, index=False)
 
             i_row = lines_df_row_init
@@ -672,9 +742,9 @@ class OSMimport:
                 shrt_name = lines_df.loc[i_row,'route_short_name']
                 trnsprt_type = lines_df.loc[i_row,'trnsprt_type']
 
-                OSM_PTstp_rel_name = 'PT_stops_rel_'+str(shrt_name)
+                OSM_PTstp_rel_name = 'PT_stops_rel_'+str(line)
                 OSM_PTstp_rel_gpkg = str(OSMstops_temp_folder)+'/'+str(OSM_PTstp_rel_name)+'.gpkg'
-                OSM_PTstp_name = 'PT_stop_position_'+str(shrt_name)
+                OSM_PTstp_name = 'PT_stop_position_'+str(line)
                 OSM_PTstp_gpkg = str(OSMstops_temp_folder)+'/'+str(OSM_PTstp_name)+'.gpkg'
                 lines_df.loc[i_row,'OSM_PTstp'] = OSM_PTstp_gpkg
                 OSM_PTstps_dwnld(extent, extent_quickosm,OSM_PTstp_rel_gpkg,OSM_PTstp_gpkg,shrt_name, OSM_PTstp_rel_name, OSM_PTstp_name, trnsprt_type)
@@ -684,10 +754,10 @@ class OSMimport:
             
             i_row = lines_df_row_init
             while i_row < len(lines_df):
+                line = lines_df.loc[i_row,'line_name']
                 rect = lines_df.loc[i_row,'GTFSstps_rect']
-                srtnm = lines_df.loc[i_row,'route_short_name']
                 OSM_PTstp_gpkg = lines_df.loc[i_row,'OSM_PTstp']
-                intersect, match, OSMjnGTFS, OSMnomatch = OSMintersecGTFS(rect,OSM_PTstp_gpkg,temp_OSM_folder,srtnm)
+                intersect, match, OSMjnGTFS, OSMnomatch = OSMintersecGTFS(rect,OSM_PTstp_gpkg,temp_OSM_folder,line)
                 lines_df.loc[i_row,'OSMintersecGTFS'] = OSMjnGTFS
                 lines_df.loc[i_row,'OSMnomatch'] = OSMnomatch
 
@@ -696,11 +766,9 @@ class OSMimport:
                 
                 i_row = i_row + 1
 
-            if os.path.exists(OSMwithGTFS_csv):
-                os.remove(OSMwithGTFS_csv)
+            if_remove(OSMwithGTFS_csv)
             OSMwithGTFS.to_csv(OSMwithGTFS_csv, index=False)
-            if os.path.exists(dfnomatch_csv):
-                os.remove(dfnomatch_csv)
+            if_remove(dfnomatch_csv)
             dfnomatch.to_csv(dfnomatch_csv, index=False)
             
             # create list of GTFS rectangls that don't match with any OSM
@@ -746,8 +814,7 @@ class OSMimport:
                 GTFSnmRCT_posdf = pd.concat([GTFSnmRCT_posdf,posdf],ignore_index=True)
                 i_row += 1
             
-            if os.path.exists(GTFSnmRCT_posdf_csv):
-                os.remove(GTFSnmRCT_posdf_csv)
+            if_remove(GTFSnmRCT_posdf_csv)
             GTFSnmRCT_posdf.to_csv(GTFSnmRCT_posdf_csv, index=False)
               
             i_row = lines_df_row_init
@@ -798,7 +865,7 @@ class OSMimport:
             ls_gpkg = [file for file in ls_files if ".gpkg" in file]
 
             for trnsprt in ls_trnsprt_todisplay:
-                to_display = [gpkg for gpkg in ls_gpkg if trnsprt in gpkg]
+                to_display = [str(gpkg) for gpkg in ls_gpkg if trnsprt in gpkg]
                 for layer in to_display:
                     if not QgsProject.instance().mapLayersByName(str(layer[:-5])):
                         OSM_trip4rout_gpkg = str(temp_OSM_for_routing)+'/'+str(layer)

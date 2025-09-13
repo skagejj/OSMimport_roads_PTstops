@@ -10,7 +10,10 @@ from qgis.core import (QgsProperty,
                         QgsCoordinateReferenceSystem, 
                         QgsProcessingFeatureSourceDefinition,
                         QgsFeatureRequest, 
-                        QgsProject
+                        QgsProject,
+                        QgsCoordinateTransformContext,
+                        QgsFields,
+                        QgsWkbTypes
 )
 from qgis.utils import iface
 from qgis.PyQt.QtCore import QVariant
@@ -18,12 +21,25 @@ import pandas as pd
 import re
 import numpy as np
 import os
+import fnmatch
 import math 
 import statistics as stat
 
 def if_not_make(folder_to_make):
     if not os.path.exists(folder_to_make):
         os.makedirs(folder_to_make)
+
+def if_remove(file_path):
+    if os.path.exists(file_path):
+        os.remove(file_path)
+
+def find(pattern, path):
+    result = []
+    for root, dirs, files in os.walk(path):
+        for name in files:
+            if fnmatch.fnmatch(name, pattern):
+                result.append(os.path.join(root, name))
+    return result
 
 def downloading_ways(extent,extent_quickosm,OSM_ways_gpkg):
     params = {'QUERY':'[out:xml] [timeout:25];\n(    \n    way["highway"="service"]('+str(extent)+');\n    way["highway"="living_street"]('+str(extent)+');\n    way["highway"="motorway"]('+str(extent)+');\n    way["highway"="primary"]('+str(extent)+');\n    way["highway"="secondary"]('+str(extent)+');\n    way["highway"="tertiary"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="unclassified"]('+str(extent)+');\n    way["highway"="motorway_link"]('+str(extent)+');\n    way["highway"="primary_link"]('+str(extent)+');\n    way["highway"="secondary_link"]('+str(extent)+');\n    way["highway"="tertiary_link"]('+str(extent)+');\n    way["highway"="residential"]('+str(extent)+');\n    way["highway"="motorway_junction"]('+str(extent)+');\n    \n  \t\n);\n(._;>;);\nout body;',
@@ -216,8 +232,7 @@ def Selected_Ttbls(ls_buses,Ttbls_selected_txt,Ttbls_plus_csv):
 
     Ttbls_selected = Ttbls[Ttbls['trnsp_shrt_name'].isin(ls_buses) ]
 
-    if os.path.exists(Ttbls_selected_txt):
-        os.remove(Ttbls_selected_txt)
+    if_remove(Ttbls_selected_txt)
     Ttbls_selected.to_csv(Ttbls_selected_txt, index=False)
 
 def time_tables_perTransport(rt,Ttbls,tempfldr,lstrnsprt):
@@ -468,6 +483,7 @@ def preapare_GTFSstops_by_transport(stops_txt, Ttbl_file,trnsprt,tempfolder,shrt
     most_freq_stps['route_short_name'] = shrt_name
     
     GTFSstops_path = str(tempfolder)+'/'+str(trnsprt)+'_stops_segments.csv'
+    if_remove(GTFSstops_path)
     most_freq_stps.to_csv(GTFSstops_path, index =False)
     return GTFSstops_path, Ttbl_with_sequences_csv
 
@@ -827,8 +843,27 @@ def OSM_PTstps_dwnld(extent, extent_quickosm,OSM_PTstp_rel_gpkg,OSM_PTstp_gpkg,s
                     'EXTENT':extent_quickosm,
                     'AREA':'',
                     'FILE': OSM_PTstp_rel_gpkg}
-    processing.run("quickosm:downloadosmdatarawquery", params )
-    
+    try:
+        processing.run("quickosm:downloadosmdatarawquery", params )
+    except Exception as e:
+        print('Overpass API request failed for "server replied Gateway Timeout" -> (skipped)')
+        schema = QgsFields()
+        schema.append(QgsField('id', QVariant.Int))
+
+        crs = QgsCoordinateReferenceSystem('epsg:4326')
+        options = QgsVectorFileWriter.SaveVectorOptions()
+        options.driverName = "GPKG"
+        options.fileEncoding = 'utf-8'
+
+        fw = QgsVectorFileWriter.create(
+            fileName=OSM_PTstp_rel_gpkg,
+            fields=schema,
+            geometryType=QgsWkbTypes.Polygon,
+            srs=crs,
+            transformContext=QgsCoordinateTransformContext(),
+            options=options)
+        del fw
+
     OSM_PTstp_rel_layer_file = str(OSM_PTstp_rel_gpkg)+'|layername='+str(OSM_PTstp_rel_name)+'_points'
     OSM_PTstp_rel_layer =  QgsVectorLayer(OSM_PTstp_rel_layer_file,OSM_PTstp_name,"ogr")
     
@@ -840,10 +875,10 @@ def OSM_PTstps_dwnld(extent, extent_quickosm,OSM_PTstp_rel_gpkg,OSM_PTstp_gpkg,s
  
 
 
-def OSMintersecGTFS(rectangles,OSMgpkg,tempOSMfolder,shrt_name):
-    OSMlayer = QgsVectorLayer(OSMgpkg,'OSM'+str(shrt_name),'ogr')
-    OSMintersecGTFSgpkg = str(tempOSMfolder)+'/OSMjoinGTFS'+ str(shrt_name) +'.gpkg'
-    OSMnomatchGTFSgpkg = str(tempOSMfolder)+'/OSM'+str(shrt_name) +'_NOmatch.gpkg'
+def OSMintersecGTFS(rectangles,OSMgpkg,tempOSMfolder, line):
+    OSMlayer = QgsVectorLayer(OSMgpkg,'OSM'+str(line),'ogr')
+    OSMintersecGTFSgpkg = str(tempOSMfolder)+'/OSMjoinGTFS'+ str(line) +'.gpkg'
+    OSMnomatchGTFSgpkg = str(tempOSMfolder)+'/OSM'+str(line) +'_NOmatch.gpkg'
     
     # adding coordinates in the attribute tables for the OSMlayer
     pr = OSMlayer.dataProvider()
@@ -888,13 +923,13 @@ def OSMintersecGTFS(rectangles,OSMgpkg,tempOSMfolder,shrt_name):
     _writer = QgsVectorFileWriter.writeAsVectorFormat(OSMlayer,OSMnomatchGTFSgpkg,"utf-8",driverName ="GPKG",onlySelected=True)
 
     # - saving tables CSV and loading
-    OSMjoinGTFSlayer = QgsVectorLayer(OSMintersecGTFSgpkg,'OSMintersecGTFS'+ str(shrt_name),'ogr')
-    OSMjoinGTFScsv = str(tempOSMfolder)+'/OSMjoinGTFS_'+ str(shrt_name)+'.csv'
+    OSMjoinGTFSlayer = QgsVectorLayer(OSMintersecGTFSgpkg,'OSMintersecGTFS'+ str(line),'ogr')
+    OSMjoinGTFScsv = str(tempOSMfolder)+'/OSMjoinGTFS_'+ str(line)+'.csv'
     QgsVectorFileWriter.writeAsVectorFormat(OSMjoinGTFSlayer,OSMjoinGTFScsv,"utf-8",driverName = "CSV")
     OSMjnGTFS = pd.read_csv(OSMjoinGTFScsv)
 
-    OSMnomatchGTFSlayer = QgsVectorLayer(OSMnomatchGTFSgpkg,'OSM'+str(shrt_name) +'_NOmatch','ogr')
-    OSMnomatchGTFScsv = str(tempOSMfolder)+'/OSM'+str(shrt_name) +'_NOmatch.csv'
+    OSMnomatchGTFSlayer = QgsVectorLayer(OSMnomatchGTFSgpkg,'OSM'+str(line) +'_NOmatch','ogr')
+    OSMnomatchGTFScsv = str(tempOSMfolder)+'/OSM'+str(line) +'_NOmatch.csv'
     QgsVectorFileWriter.writeAsVectorFormat(OSMnomatchGTFSlayer,OSMnomatchGTFScsv,"utf-8",driverName = "CSV")
     OSMnomatch = pd.read_csv(OSMnomatchGTFScsv)
     del params
@@ -1040,10 +1075,12 @@ def joinNEWandValidOSM(newOSMpos,GTFSnomatch_RD,OSMintersectGTFS,GTFSstps_seg,te
     
     OSMstops_updated = OSMstops_unsorted.sort_values(['trip','pos']).reset_index(drop=True)
 
+    # if there is more than one stop in OSM per GTFS
+    # few lines later the closer OSM is taken !!!
     if len(GTFSss) == len(OSMstops_updated):
-        print('for each GTFS there is an OSM')
+        print('for each GTFS there is an OSM in the '+str(line)+' line ')
     else:
-        print('incoerence in the number of GTFS with the OSM')
+        print('in the '+str(line)+' line, for some GTFS there are more than one OSM, the closest OSM has been kept')
     
     i_row = 0
     while i_row<len(OSMstops_updated):
