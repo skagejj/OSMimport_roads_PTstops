@@ -25,6 +25,7 @@ import os
 import fnmatch
 import math
 import statistics as stat
+import time
 
 
 def if_not_make(folder_to_make):
@@ -32,9 +33,16 @@ def if_not_make(folder_to_make):
         os.makedirs(folder_to_make)
 
 
-def if_remove(file_path):
+def if_remove(file_path, files_to_del):
     if os.path.exists(file_path):
-        os.remove(file_path)
+        try:
+            if file_path in files_to_del["path"]:
+                files_to_del["path"].remove(file_path)
+            os.remove(file_path)
+        except Exception as e:
+            files_to_del["path"].append(file_path)
+            print(f"Error removing file {file_path}: {e}")
+    return files_to_del
 
 
 def find(pattern, path):
@@ -45,6 +53,25 @@ def find(pattern, path):
                 result.append(os.path.join(root, name))
     return result
 
+def quickOSM_API(params):
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            processing.run("quickosm:downloadosmdatarawquery", params)
+            print(f"Successfully downloaded OSM ways data on attempt {attempt + 1}")
+            break
+        except Exception as e:
+            if "Gateway Timeout" in str(e) or "NetWorkErrorException" in str(e):
+                if attempt < max_retries - 1:
+                    wait_time = (attempt + 1) * 30  # Wait 30, 60 seconds between retries
+                    print(f"Attempt {attempt + 1} failed with timeout error. Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"All {max_retries} attempts failed. Final error: {e}")
+                    raise
+            else:
+                # Re-raise non-timeout errors immediately
+                raise
 
 def downloading_ways(extent, extent_quickosm, OSM_ways_gpkg):
     params = {
@@ -83,7 +110,7 @@ def downloading_ways(extent, extent_quickosm, OSM_ways_gpkg):
         "AREA": "",
         "FILE": OSM_ways_gpkg,
     }
-    processing.run("quickosm:downloadosmdatarawquery", params)
+    quickOSM_API(params)
 
 
 def downloading_railway(extent, extent_quickosm, OSM_tramways_gpkg, trnsprt):
@@ -100,7 +127,7 @@ def downloading_railway(extent, extent_quickosm, OSM_tramways_gpkg, trnsprt):
         "AREA": "",
         "FILE": OSM_tramways_gpkg,
     }
-    processing.run("quickosm:downloadosmdatarawquery", params)
+    quickOSM_API(params)
 
 
 def highway_average_speed(OSM_roads_csv, highway_speed_csv):
@@ -295,14 +322,15 @@ def Ttbls_plus(Ttlbs_txt, Ttbls_plus_csv, dwnldfld, trips_txt):
     Ttbls.to_csv(Ttbls_plus_csv, index=False)
 
 
-def Selected_Ttbls(ls_buses, Ttbls_selected_txt, Ttbls_plus_csv):
+def Selected_Ttbls(ls_buses, Ttbls_selected_txt, Ttbls_plus_csv,files_to_del):
 
     Ttbls = pd.read_csv(Ttbls_plus_csv)
 
     Ttbls_selected = Ttbls[Ttbls["trnsp_shrt_name"].isin(ls_buses)]
 
-    if_remove(Ttbls_selected_txt)
+    if_remove(Ttbls_selected_txt, files_to_del)
     Ttbls_selected.to_csv(Ttbls_selected_txt, index=False)
+    return files_to_del
 
 
 def time_tables_perTransport(rt, Ttbls, tempfldr, lstrnsprt):
@@ -347,7 +375,7 @@ def time_tables_perTransport(rt, Ttbls, tempfldr, lstrnsprt):
 
 
 def preapare_GTFSstops_by_transport(
-    stops_txt, Ttbl_file, trnsprt, tempfolder, shrt_name, tempfolderstptimes
+    stops_txt, Ttbl_file, trnsprt, tempfolder, shrt_name, tempfolderstptimes, files_to_del
 ):
     stps = pd.read_csv(stops_txt, dtype={"stop_id": str})
     # load the stop times (Time Table) ot the transport
@@ -580,9 +608,9 @@ def preapare_GTFSstops_by_transport(
     most_freq_stps["route_short_name"] = shrt_name
 
     GTFSstops_path = str(tempfolder) + "/" + str(trnsprt) + "_stops_segments.csv"
-    if_remove(GTFSstops_path)
+    if_remove(GTFSstops_path, files_to_del)
     most_freq_stps.to_csv(GTFSstops_path, index=False)
-    return GTFSstops_path, Ttbl_with_sequences_csv
+    return GTFSstops_path, Ttbl_with_sequences_csv, files_to_del
 
 
 def shape_assignement(GTFSstops_csv, Ttbl_file, line_trip_csv, trips_txt):
@@ -895,7 +923,7 @@ def rectangles_sidewalk(
     line_name,
     GTFSstps_rect_sidewalk_gpkg,
     GTFSstps_rect_sidewalk_csv,
-    trnsprt_type,
+    trnsprt_type,files_to_del
 ):
 
     rect_type = "sidewalk"
@@ -958,7 +986,7 @@ def rectangles_sidewalk(
         GTFS_angldf["rect_angle"]
     )
 
-    os.remove(GTFSstps_rect_sidewalk_csv)
+    files_to_del = if_remove(GTFSstps_rect_sidewalk_csv,files_to_del)
 
     GTFS_angldf.to_csv(GTFSstps_rect_sidewalk_csv, index=False)
 
@@ -981,6 +1009,7 @@ def rectangles_sidewalk(
     processing.run("native:rectanglesovalsdiamonds", params)
 
     del params, expression1, expression2, expression3
+    return files_to_del
     # return rectfile, GTFScsv
 
 
@@ -1106,7 +1135,7 @@ def OSM_PTstps_dwnld(
         "FILE": OSM_PTstp_rel_gpkg,
     }
     try:
-        processing.run("quickosm:downloadosmdatarawquery", params)
+        quickOSM_API(params)
     except Exception as e:
         print(
             'Overpass API request failed for "server replied Gateway Timeout" -> (skipped)'
@@ -1259,6 +1288,7 @@ def stp_posGTFSnm_rect(
     tram_long,
     trnsprt_type,
     agency_txt,
+    files_to_del
 ):
 
     if (
@@ -1407,12 +1437,12 @@ def stp_posGTFSnm_rect(
 
     GTFS_posdf.to_csv(GTFS_nmRCT_NEWpos_CSV, index=False)
 
-    os.remove(GTFS_nmRCT_pos_CSV1)
-    os.remove(GTFS_nmRCT_pos_CSV2)
-    os.remove(GTFS_nmRCT_pos_CSV3)
-    os.remove(GTFS_pos1)
+    files_to_del = if_remove(GTFS_nmRCT_pos_CSV1, files_to_del)
+    files_to_del = if_remove(GTFS_nmRCT_pos_CSV2, files_to_del)
+    files_to_del = if_remove(GTFS_nmRCT_pos_CSV3, files_to_del)
+    files_to_del = if_remove(GTFS_pos1, files_to_del)
 
-    return GTFS_nmRCT_NEWpos_CSV
+    return GTFS_nmRCT_NEWpos_CSV, files_to_del
 
 
 def joinNEWandValidOSM(
@@ -1423,6 +1453,7 @@ def joinNEWandValidOSM(
     temp_OSM_for_routing,
     line,
     stops_txt,
+    files_to_del
 ):
 
     GTFSnm = pd.read_csv(GTFSnomatch_RD, dtype={"stop_id": str})
@@ -1558,13 +1589,13 @@ def joinNEWandValidOSM(
         QgsVectorFileWriter.writeAsVectorFormat(
             OSM4rout_layer, OSMstops_trip_gpkg, "UTF-8", OSM4rout_layer.crs(), "GPKG"
         )
-        os.remove(OSMstops_trip_csv)
+        files_to_del = if_remove(OSMstops_trip_csv, files_to_del)
 
     OSMstops_forrouting = (
         str(temp_OSM_for_routing) + "/OSM4routing_" + str(line) + ".csv"
     )
     OSMstops_tosave.to_csv(OSMstops_forrouting, index=False)
-    return OSMstops_forrouting
+    return OSMstops_forrouting, files_to_del
 
 
 # to attach at the end of the stops correctly visualized on the map
@@ -1599,40 +1630,13 @@ def transcript_main_files(
     full_roads_gpgk,
     Ttbls_selected_name,
     Ttbls_selected_txt,
+    files_to_delete_next_bus_loading_name,
+    files_to_delete_next_bus_loading_json
 ):
-    main_files = pd.DataFrame()
-
-    i_row = len(main_files)
-    main_files.loc[i_row, "file_name"] = OSM_ways_name
-    main_files.loc[i_row, "file_path"] = OSM_ways_gpkg
-
-    i_row = len(main_files)
-    main_files.loc[i_row, "file_name"] = OSM_roads_name
-    main_files.loc[i_row, "file_path"] = OSM_roads_gpkg
-
-    i_row = len(main_files)
-    main_files.loc[i_row, "file_name"] = OSM_roads_nameCSV
-    main_files.loc[i_row, "file_path"] = OSM_roads_csv
-
-    i_row = len(main_files)
-    main_files.loc[i_row, "file_name"] = highway_speed_name
-    main_files.loc[i_row, "file_path"] = highway_speed_csv
-
-    i_row = len(main_files)
-    main_files.loc[i_row, "file_name"] = bus_lanes_name
-    main_files.loc[i_row, "file_path"] = OSM_bus_lanes_gpkg
-
-    i_row = len(main_files)
-    main_files.loc[i_row, "file_name"] = full_roads_name
-    main_files.loc[i_row, "file_path"] = full_roads_gpgk
-
-    i_row = len(main_files)
-    main_files.loc[i_row, "file_name"] = Ttbls_selected_name
-    main_files.loc[i_row, "file_path"] = Ttbls_selected_txt
-
+    main_files_dict = {"name": [OSM_ways_name,OSM_roads_name,OSM_roads_nameCSV,highway_speed_name,bus_lanes_name,full_roads_name,Ttbls_selected_name,files_to_delete_next_bus_loading_name], "path": [OSM_ways_gpkg,OSM_roads_gpkg,OSM_roads_csv,highway_speed_csv,OSM_bus_lanes_gpkg,full_roads_gpgk,Ttbls_selected_txt,files_to_delete_next_bus_loading_json]}
+    main_files = pd.DataFrame(main_files_dict)
     os.makedirs(main_files_fld)
     main_files.to_csv(main_files_csv, index=False)
-    return main_files
 
 
 def if_display(file_path, layer_name):
