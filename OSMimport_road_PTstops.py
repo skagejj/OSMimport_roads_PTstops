@@ -325,7 +325,7 @@ class OSMimport:
                     path_to_del = lines_df.loc[line_name,file]
                     files_to_del = if_remove(path_to_del,files_to_del)
                 except Exception:
-                    print('the '+str(line_name)+'\'s "'+str(file)+'" hasn \'t produced yet')
+                    print('the '+str(line_name)+'\'s "'+str(file)+'" hasn\'t produced yet')
             try:
                 lines_df = lines_df.drop(line_name)
             except Exception:
@@ -390,9 +390,9 @@ class OSMimport:
             msg = QMessageBox()
             msg.setIcon(QMessageBox.Information)
             # setting message for Message Box
-            msg.setText("The \'Agency selection\' is in progress wait until the message box is closed")
+            msg.setText("The \'OSM import roads and PT stops\' is in progress wait until the message box is closed")
             # setting Message box window title
-            msg.setWindowTitle("!! wait the next message \'GTFS agency selection\' is in progress !!")
+            msg.setWindowTitle("!! wait the next message \'OSM import roads and PT stops\' is in progress !!")
             msg.show()
 
             temp_folder = 'OSM_data'
@@ -946,13 +946,13 @@ class OSMimport:
                 os.remove(lines_df_csv)   
             lines_df.to_csv(lines_df_csv,index=False)
             
-            print('Done! : your files are ready')
+            print('Done!')
 
             msg.close()
 
             msg2 = QMessageBox()
             msg2.setIcon(QMessageBox.Information)
-            msg2.setText("Look at the map!")
+            msg2.setText("Look at the map! \nyou can change the position for the Stops \nafter locating the off road Stops with the \'2. Routing OSM Public Transports\' plugin")
             msg2.setWindowTitle("Done !")
             msg2.exec_()
 
