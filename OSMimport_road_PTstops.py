@@ -21,6 +21,7 @@
  *                                                                         *
  ***************************************************************************/
 """
+from pandas.io import json
 from qgis.PyQt.QtCore import QSettings, QTranslator, QCoreApplication
 from qgis.PyQt.QtGui import QIcon
 from qgis.PyQt.QtWidgets import QAction, QListWidgetItem
@@ -42,6 +43,7 @@ import os.path
 
 # Import for the code in def run()
 import pandas as pd
+import json
 from qgis import processing
 from .core_functions import (downloading_ways,
                             downloading_railway,
@@ -69,6 +71,7 @@ from .core_functions import (downloading_ways,
                             if_remove,
                             find
 )
+from PyQt5.QtWidgets import QMessageBox
 
 class OSMimport:
     """QGIS Plugin Implementation."""
@@ -241,6 +244,18 @@ class OSMimport:
 
         os.remove(str(dwnldfld)+'/routes.txt')
         routes.to_csv(str(dwnldfld)+'/routes.txt',index=False)
+        files_to_delete_next_bus_loading_json = str(dwnldfld)+'/temp/files_to_delete_next_bus_loading.json'
+        if os.path.exists(files_to_delete_next_bus_loading_json):
+            with open(files_to_delete_next_bus_loading_json, 'r') as f:
+                files_to_del = json.load(f)
+            for file in files_to_del["path"]:
+                files_to_del = if_remove(file, files_to_del)
+            files_to_del_str = json.dumps(files_to_del,indent=2)
+            with open(files_to_delete_next_bus_loading_json, 'w') as f:
+                f.write(files_to_del_str)
+            if files_to_del["path"]:
+                print('the files will be deleted only restarting QGIS')
+                print('RESTART QGIS and click again the "Update Transport numbers" button')
 
         for trnsprt in ls_transport:
             self.OSMimport_dialog.listbusWidget.addItem(QListWidgetItem(str(trnsprt)))
@@ -252,6 +267,12 @@ class OSMimport:
         buses_done_csv = os.path.join(main_files_fld,'buses.csv')
         lines_df_csv = str(dwnldfld)+'/lines_files_list.csv'
         uq_mn_trips_csv = str(dwnldfld)+'/temp/mini-trips/uq_mini_trips.csv'
+        files_to_delete_next_bus_loading_json = str(dwnldfld)+'/temp/files_to_delete_next_bus_loading.json'
+        if os.path.exists(files_to_delete_next_bus_loading_json):
+            with open(files_to_delete_next_bus_loading_json, 'r') as f:
+                files_to_del = json.load(f)
+        else:
+            files_to_del = {"path": []}
 
         lines_df_csv = os.path.join(str(dwnldfld),'lines_files_list.csv')
 
@@ -302,29 +323,36 @@ class OSMimport:
             for file in ls_files:
                 try :
                     path_to_del = lines_df.loc[line_name,file]
-                    if_remove(path_to_del)
+                    files_to_del = if_remove(path_to_del,files_to_del)
                 except Exception:
                     print('the '+str(line_name)+'\'s "'+str(file)+'" hasn \'t produced yet')
             try:
                 lines_df = lines_df.drop(line_name)
             except Exception:
                 print('you have never run the plugins with the '+str(line_name))
-                
-        if_remove(lines_df_csv)
+
+        files_to_del = if_remove(lines_df_csv, files_to_del)
         lines_df.to_csv(lines_df_csv)
 
-        if_remove(buses_done_csv)
+        files_to_del = if_remove(buses_done_csv, files_to_del)
         buses_done.to_csv(buses_done_csv)
 
         if os.path.exists(uq_mn_trips_csv):
-            if_remove(uq_mn_trips_csv)
+            if_remove(uq_mn_trips_csv, files_to_del)
             uq_mn_trips.to_csv(uq_mn_trips_csv, index=False)
 
         founds=[]
         for line_name in ls_lines_names:
             for found in find('*'+str(line_name)+'*',dwnldfld): 
-                if_remove(found)
+                files_to_del = if_remove(found, files_to_del)
             print ('the '+str(line_name)+' has been removed sucessfully')
+
+        files_to_del_str = json.dumps(files_to_del,indent=2)
+        with open(files_to_delete_next_bus_loading_json, 'w') as f:
+            f.write(files_to_del_str)
+        if files_to_del["path"]:
+            print('the files will be deleted only restarting QGIS')
+            print('RESTART QGIS and click again the "Remove selected lines" button')
         
     def unload(self):
         """Removes the plugin menu item and icon from QGIS GUI."""
@@ -358,6 +386,14 @@ class OSMimport:
         outputspath = self.OSMimport_dialog.OutPutQgsFolderWidget.filePath()
         # See if OK was pressed
         if result:
+
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Information)
+            # setting message for Message Box
+            msg.setText("The \'Agency selection\' is in progress wait until the message box is closed")
+            # setting Message box window title
+            msg.setWindowTitle("!! wait the next message \'GTFS agency selection\' is in progress !!")
+            msg.show()
 
             temp_folder = 'OSM_data'
             road_temp_folder = os.path.join(dwnldfld,temp_folder)
@@ -439,6 +475,9 @@ class OSMimport:
             Ttbls_selected_name = 'stop_times_selected_lines'
             Ttbls_selected_txt = str(dwnldfld)+'/'+str(Ttbls_selected_name)+'.txt'
 
+            files_to_delete_next_bus_loading_name = 'files_to_delete_next_bus_loading'
+            files_to_delete_next_bus_loading_json = str(dwnldfld)+'/temp/'+str(files_to_delete_next_bus_loading_name)+'.json'
+
             temp_folder = str(os.getenv("USERNAME"))+'_main_files'
             main_files_fld = os.path.join(str(dwnldfld)+'/'+str(temp_folder))
             main_files_csv = str(dwnldfld)+'/'+str(temp_folder)+'/main_files.csv'
@@ -478,13 +517,14 @@ class OSMimport:
 
             tempfolder = 'temp/temp_OSM_forrouting'
             temp_OSM_for_routing = os.path.join (dwnldfld,tempfolder)
+            
                         
             GTFSnm_angledf_csv = str(outputspath+'/GTFSnm_angl.csv')
             OSMwithGTFS_csv = str(outputspath)+'/OSMintersecGTFS.csv'
             dfnomatch_csv = str(outputspath)+'/OSMnomatch.csv'
             GTFSnm_rect_csv = str(outputspath)+'/GTFSnm_rect.csv'
             GTFSnmRCT_posdf_csv = str(outputspath)+'/GTFSnmRCT_NEWpos.csv'
-            OSM4rout_file = str(outputspath)+'/OSM4routing.csv'
+            OSM4rout_file = str(outputspath)+'/OSM4routing.csv'            
 
             GTFSnm_angledf = pd.DataFrame()
             OSMwithGTFS = pd.DataFrame()
@@ -495,7 +535,7 @@ class OSMimport:
 
             # condition if the plugin have aleady run at list ones
             if not os.path.exists(main_files_csv):
-                transcript_main_files(main_files_fld,main_files_csv,OSM_ways_name,OSM_ways_gpkg,OSM_roads_name,OSM_roads_gpkg,OSM_roads_nameCSV,OSM_roads_csv,highway_speed_name,highway_speed_csv, bus_lanes_name, OSM_bus_lanes_gpkg,full_roads_name, full_roads_gpgk,Ttbls_selected_name, Ttbls_selected_txt)
+                transcript_main_files(main_files_fld,main_files_csv,OSM_ways_name,OSM_ways_gpkg,OSM_roads_name,OSM_roads_gpkg,OSM_roads_nameCSV,OSM_roads_csv,highway_speed_name,highway_speed_csv, bus_lanes_name, OSM_bus_lanes_gpkg,full_roads_name, full_roads_gpgk,Ttbls_selected_name, Ttbls_selected_txt, files_to_delete_next_bus_loading_name, files_to_delete_next_bus_loading_json)
                 
                 os.makedirs(road_temp_folder)
                 
@@ -564,6 +604,12 @@ class OSMimport:
                 prev_ls_buses = [str(bus) for bus in list(ls_buses_df.trnsp_shrt_name)]
                 del ls_buses_df
 
+            if os.path.exists(files_to_delete_next_bus_loading_json):
+                with open(files_to_delete_next_bus_loading_json, 'r') as f:
+                    files_to_del = json.load(f)
+            else:
+                files_to_del = {"path": []}
+
             try:
                 prev_ls_buses
             except NameError:
@@ -586,7 +632,7 @@ class OSMimport:
                 Ttbls_plus(Ttlbs_txt,Ttbls_plus_csv,dwnldfld,trips_txt)
             
             print('Extracting the data of those transports')
-            Selected_Ttbls(ls_buses,Ttbls_selected_txt,Ttbls_plus_csv) 
+            files_to_del = Selected_Ttbls(ls_buses,Ttbls_selected_txt,Ttbls_plus_csv,files_to_del) 
 
             print('the main Time Tables is ready, I start to create the dataframes for each single transport')
            
@@ -636,7 +682,7 @@ class OSMimport:
                 Ttbl_file = lines_df.loc[i_row,'GTFSstop_times'] 
                 line = lines_df.loc[i_row,'line_name']
                 shrt_name = lines_df.loc[i_row,'route_short_name']
-                GTFSstops, Ttbl_with_sequences_csv = preapare_GTFSstops_by_transport(stops_txt,Ttbl_file,line,temp_folder_GTFSstops,shrt_name,temp_folder_Ttbls)
+                GTFSstops, Ttbl_with_sequences_csv, files_to_del = preapare_GTFSstops_by_transport(stops_txt,Ttbl_file,line,temp_folder_GTFSstops,shrt_name,temp_folder_Ttbls, files_to_del)
                 lines_df.loc[i_row,'GTFSstops&segments'] = GTFSstops
                 lines_df.loc[i_row,'GTFSstop_times_with_seq'] = Ttbl_with_sequences_csv
                 i_row=i_row+1 
@@ -685,7 +731,7 @@ class OSMimport:
                 GTFSnm_angledf = pd.concat([GTFSnm_angledf,GTFSnm_angl_toconcat],ignore_index=True) 
                 i_row = i_row+1
 
-            if_remove(GTFSnm_angledf_csv)
+            files_to_del = if_remove(GTFSnm_angledf_csv,files_to_del)
             GTFSnm_angledf.to_csv(GTFSnm_angledf_csv, index=False)
 
             i_row = lines_df_row_init
@@ -717,7 +763,7 @@ class OSMimport:
                 GTFSstops_angle_sidewalk_layer = QgsVectorLayer(GTFSstops_angle_sidewalk_gpkg,'GTFS'+str(line)+'_anlge_sidewalk',"ogr")
                 ls_GTFSstps_rect = []
                 if not GTFSstops_angle_sidewalk_layer.featureCount() == 0:
-                    rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, buses_long,tram_long,line, GTFSstps_rect_sidewalk_gpkg, GTFSstps_rect_sidewalk_csv,trnsprt_type)
+                    files_to_del = rectangles_sidewalk(GTFSstops_angle_sidewalk_gpkg, buses_long,tram_long,line, GTFSstps_rect_sidewalk_gpkg, GTFSstps_rect_sidewalk_csv,trnsprt_type,files_to_del)
                     lines_df.loc[i_row,'GTFSstps_rect_sidewalk_gpkg'] = GTFSstps_rect_sidewalk_gpkg
                     lines_df.loc[i_row,'GTFSstps_rect_sidewalk_csv'] = GTFSstps_rect_sidewalk_csv
                     ls_GTFSstps_rect.append(GTFSstps_rect_sidewalk_gpkg)
@@ -782,9 +828,9 @@ class OSMimport:
                 
                 i_row = i_row + 1
 
-            if_remove(OSMwithGTFS_csv)
+            files_to_del = if_remove(OSMwithGTFS_csv,files_to_del)
             OSMwithGTFS.to_csv(OSMwithGTFS_csv, index=False)
-            if_remove(dfnomatch_csv)
+            files_to_del = if_remove(dfnomatch_csv,files_to_del)
             dfnomatch.to_csv(dfnomatch_csv, index=False)
             
             # create list of GTFS rectangls that don't match with any OSM
@@ -821,7 +867,7 @@ class OSMimport:
                 splt_roads = lines_df.loc[i_row,'Spl_roads']
                 test = pd.read_csv(GTFSnmRCT_csv)
                 if not test.empty:
-                    NEWpos_file_nmRCT = stp_posGTFSnm_rect(GTFSnmRCT_csv,line_name,splt_roads,temp_GTFSpos_folder,buses_long,tram_long, trnsprt_type, agency_txt)
+                    NEWpos_file_nmRCT, files_to_del = stp_posGTFSnm_rect(GTFSnmRCT_csv,line_name,splt_roads,temp_GTFSpos_folder,buses_long,tram_long, trnsprt_type, agency_txt,files_to_del)
                 else:
                     NEWpos_file_nmRCT = str(temp_GTFSpos_folder)+'/GTFSnmRCT_pos_'+str(line_name)+'.csv'
 
@@ -829,9 +875,16 @@ class OSMimport:
                 posdf = pd.read_csv(NEWpos_file_nmRCT)
                 GTFSnmRCT_posdf = pd.concat([GTFSnmRCT_posdf,posdf],ignore_index=True)
                 i_row += 1
-            
-            if_remove(GTFSnmRCT_posdf_csv)
+
+            files_to_del = if_remove(GTFSnmRCT_posdf_csv, files_to_del)
             GTFSnmRCT_posdf.to_csv(GTFSnmRCT_posdf_csv, index=False)
+
+            files_to_del_str = json.dumps(files_to_del, indent=2)
+            with open(files_to_delete_next_bus_loading_json, 'w') as f:
+                f.write(files_to_del_str)
+            if files_to_del["path"]:
+                print('the files will be deleted only restarting QGIS')
+                print('RESTART QGIS and click again the "Update Transport numbers" button')
               
             i_row = lines_df_row_init
             while i_row < len(lines_df):
@@ -840,7 +893,7 @@ class OSMimport:
                 OSMintersectGTFS = lines_df.loc[i_row,'OSMintersecGTFS']
                 GTFSstps_seg = lines_df.loc[i_row,'GTFSstops&segments'] 
                 line = lines_df.loc[i_row,'line_name']
-                OSMstops_forrouting = joinNEWandValidOSM(newOSMpos,GTFSnomatch_RD,OSMintersectGTFS,GTFSstps_seg,temp_OSM_for_routing,line,stops_txt)
+                OSMstops_forrouting, files_to_del = joinNEWandValidOSM(newOSMpos,GTFSnomatch_RD,OSMintersectGTFS,GTFSstps_seg,temp_OSM_for_routing,line,stops_txt, files_to_del)
                 lines_df.loc[i_row,'OSM4routing'] = OSMstops_forrouting
                 OSM4r_toconcat = pd.read_csv(OSMstops_forrouting)
                 OSM4routing = pd.concat([OSM4routing,OSM4r_toconcat],ignore_index=True)
@@ -894,5 +947,13 @@ class OSMimport:
             lines_df.to_csv(lines_df_csv,index=False)
             
             print('Done! : your files are ready')
+
+            msg.close()
+
+            msg2 = QMessageBox()
+            msg2.setIcon(QMessageBox.Information)
+            msg2.setText("Look at the map!")
+            msg2.setWindowTitle("Done !")
+            msg2.exec_()
 
             
