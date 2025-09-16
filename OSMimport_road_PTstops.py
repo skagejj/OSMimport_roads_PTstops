@@ -71,6 +71,7 @@ from .core_functions import (downloading_ways,
                             if_remove,
                             find
 )
+from PyQt5.QtWidgets import QMessageBox
 
 class OSMimport:
     """QGIS Plugin Implementation."""
@@ -385,6 +386,14 @@ class OSMimport:
         outputspath = self.OSMimport_dialog.OutPutQgsFolderWidget.filePath()
         # See if OK was pressed
         if result:
+
+            msg = QMessageBox()
+            msg.setIcon(QMessageBox.Information)
+            # setting message for Message Box
+            msg.setText("The \'Agency selection\' is in progress wait until the message box is closed")
+            # setting Message box window title
+            msg.setWindowTitle("!! wait the next message \'GTFS agency selection\' is in progress !!")
+            msg.show()
 
             temp_folder = 'OSM_data'
             road_temp_folder = os.path.join(dwnldfld,temp_folder)
@@ -938,5 +947,13 @@ class OSMimport:
             lines_df.to_csv(lines_df_csv,index=False)
             
             print('Done! : your files are ready')
+
+            msg.close()
+
+            msg2 = QMessageBox()
+            msg2.setIcon(QMessageBox.Information)
+            msg2.setText("Look at the map!")
+            msg2.setWindowTitle("Done !")
+            msg2.exec_()
 
             
