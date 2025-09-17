@@ -39,6 +39,7 @@ Watch the video tutorial for this plugin [here](https://drive.google.com/file/d/
 - QGIS 3.x
 - Python libraries: `pandas`, `numpy`, `statistics`
 - QGIS Processing Toolbox
+- QuickOSM
 
 ## License
 This plugin is distributed under the GNU General Public License v2.0 or later.
